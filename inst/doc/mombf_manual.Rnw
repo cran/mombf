@@ -36,7 +36,7 @@
 
 \begin{document}
 
-\title{mombf library vignette}
+\title{mombf package vignette}
 \author{David Rossell \\
 \small{Department of Biostatistics and Bioinformatics} \\
 \small{Institute for Research in Biomedicine, Barcelona, Spain} \\
