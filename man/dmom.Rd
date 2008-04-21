@@ -42,8 +42,7 @@ qimom(p, V1 = 1, g = 1, n = 1, nu = 1)
     natural log of the prior density.} 
 }
 \details{
- Define the quadratic form \code{q(theta)= (theta-theta0)' *
-   solve(V1) * (theta-theta0) / (n*g)}.
+ Define the quadratic form \eqn{q(theta)= (theta-theta0)' * V1^{-1} * (theta-theta0) / (n*g)}.
    The moment prior density is proportional to
    q(theta)*dmvnorm(theta,theta0,n*g*V1).
    The inverse moment prior density is proportional to

@@ -23,7 +23,7 @@ priorp2g(priorp, q, nu = 1, prior = 'iMom')
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{prior.mode}{ Prior mode for the quadratic form
-    \code{(theta-theta0)' * solve(Sigma) * (theta-theta0)/(n*g*sigma^2)},
+    \eqn{q(theta)= (theta-theta0)' * V1^{-1} * (theta-theta0) / (n*g)},
      where sigma is the dispersion parameter and Sigma is given by the
      design matrix.  }
   \item{prior}{ \code{prior=='Mom'} does computations for the moment
