@@ -1,3 +1,9 @@
+CHANGES IN VERSION 1.0.2
+- Fixed bug in the multivariate calculation of MOM Bayes Factors (affects mombf, momknown)
+
+CHANGES IN VERSION 1.0.1
+- Fixed bug in the multivariate calculation of dmom
+
 CHANGES IN VERSION 1.0.0
 - Added option 'method' to functions 'imombf', 'momknown' and 'imomunknown' to allow users to choose integration method. Default integration method changed from Monte Carlo to integration based on routine 'integrate' from package 'stats'.
 - Functions 'imombf', 'imomknown' and 'imomunknown' now accept parameter 'g' to be a vector instead of a single value.

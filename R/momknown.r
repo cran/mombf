@@ -5,7 +5,7 @@ p1 <- length(theta1hat)
 l <- theta1hat-theta0; l <- matrix(l,nrow=1) %*% solve(V1) %*% matrix(l,ncol=1) * n*g/((1+n*g)*sigma^2) #noncentr param
 muk <- p1+l
 t1 <- matrix(theta1hat-theta0,nrow=1) %*% solve(V1) %*% matrix(theta1hat-theta0,ncol=1) * n*g/((1+n*g)*sigma^2)
-bf <- .5*t1 + log(muk) - log(1+n*g) - (p1/2)*log(1+n*g)
+bf <- .5*t1 + log(muk) - log(1+n*g) - (p1/2)*log(1+n*g) - log(p1)
 if (!logbf) bf <- exp(bf)
 return(bf)
 }

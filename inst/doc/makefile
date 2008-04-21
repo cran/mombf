@@ -12,4 +12,4 @@ mombfmanual: mombf.Rnw
 	rm mombf.bbl
 	rm mombf-fig*.pdf
 	rm mombf-fig*.eps
-	rm Rplots.ps
+	rm Rplots.*
