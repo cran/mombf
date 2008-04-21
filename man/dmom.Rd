@@ -1,21 +1,35 @@
 \name{dmom}
 \alias{dmom}
 \alias{dimom}
+\alias{pmom}
+\alias{pimom}
+\alias{qmom}
+\alias{qimom}
 %- Also NEED an '\alias' for EACH other topic documented here.
-\title{ Density for Moment prior and inverse moment prior. }
+\title{ Moment prior and inverse moment prior. }
 \description{
-  These functions evaluate the density for the moment and inverse moment
+  \code{dmom} and \code{dimom} return the density for the moment and inverse moment
   priors, in the univariate and multivariate setting.
+  \code{pmom} and \code{pimom} return the distribution function for the univariate
+  moment and inverse moment priors.
+  \code{qmom} and \code{qimom} return the quantiles for the univariate
+  moment and inverse moment priors.
 }
 \usage{
-dmom(x, theta0, V1, g = 1, n = 1)
-dimom(x, theta0, V1, g = 1, n = 1, nu = 1, logscale = FALSE)
+dmom(x, V1 = 1, g = 1, n = 1, theta0)
+dimom(x, V1 = 1, g = 1, n = 1, nu = 1, theta0, logscale = FALSE)
+pmom(q, V1 = 1, g = 1, n = 1)
+pimom(q, V1 = 1, g = 1, n = 1, nu = 1)
+qmom(p, V1 = 1, g = 1, n = 1)
+qimom(p, V1 = 1, g = 1, n = 1, nu = 1)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{x}{ In the univariate setting, \code{x} is a vector with the
     values at which to evaluate the density. In the multivariate setting
-  it is a matrix with an observation in each row.}
+    it is a matrix with an observation in each row.}
+  \item{q}{ Vector of quantiles.}
+  \item{p}{ Vector of probabilities.}
   \item{theta0}{ Location parameter. Defaults to 0. }
   \item{V1}{ Scale matrix. Defaults to 1 in univariate setting and
     the identity matrix in the multivariate setting. }
@@ -34,6 +48,8 @@ dimom(x, theta0, V1, g = 1, n = 1, nu = 1, logscale = FALSE)
    q(theta)*dmvnorm(theta,theta0,n*g*V1).
    The inverse moment prior density is proportional to
    \code{q(theta)^(-(nu+d)/2) * exp(-1/q(theta))}.
+   pmom, pimom and qimom use closed-form expressions, while qmom uses
+   nlminb to find quantiles numerically.
 }
 \value{
   \code{dmom} returns the value of the moment prior density.
@@ -42,10 +58,9 @@ dimom(x, theta0, V1, g = 1, n = 1, nu = 1, logscale = FALSE)
 \references{ See http://rosselldavid.googlepages.com for technical
   reports. }
 \author{ David Rossell }
-\seealso{ \code{\link{g2mode}} and \code{\link{g2mode.univ}} to find the
-  prior mode corresponding to a given \code{g}. \code{\link{mode2g}} and
-  \code{\link{mode2g.univ}} to find the g value corresponding to a given
-prior mode.}
+\seealso{ \code{\link{g2mode}} to find the
+  prior mode corresponding to a given \code{g}. \code{\link{mode2g}}
+  to find the g value corresponding to a given prior mode.}
 \examples{
 #evaluate and plot the moment and inverse moment priors
 library(mombf)

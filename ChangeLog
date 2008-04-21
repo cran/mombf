@@ -1,0 +1,13 @@
+CHANGES IN VERSION 1.0.0
+- Added option 'method' to functions 'imombf', 'momknown' and 'imomunknown' to allow users to choose integration method. Default integration method changed from Monte Carlo to integration based on routine 'integrate' from package 'stats'.
+- Functions 'imombf', 'imomknown' and 'imomunknown' now accept parameter 'g' to be a vector instead of a single value.
+- Added pmom and pimom functions
+- Removed g2mode.univ and mode2g.univ functions. The same results can now be obtained via g2mode and mode2g.
+- Corrected error in dimom evaluation
+- Corrected error in zbfknown evaluation
+- Changed order of dmom and dimom arguments: theta0 is not 1st argument anymore
+- Added contents to vignette illustrating the new functions, and changed the name of the vignette from "mombf_manual" to "mombf"
+
+CHANGES IN VERSION 0.0.1
+- Changed word "library" in Vignette title to "package"
+- Indicated GPL(>=2) in the DESCRIPTION file 

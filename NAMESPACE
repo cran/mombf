@@ -2,9 +2,7 @@ export( mode2g,
 
         g2mode,
 
-        mode2g.univ,
-
-        g2mode.univ,
+        priorp2g,
 
         mombf,
 
@@ -29,6 +27,14 @@ export( mode2g,
         zbfknown,
 
         zbfunknown,
+
+        pmom,
+
+        pimom,
+
+        qmom,
+
+        qimom,
 
         dmom,
 

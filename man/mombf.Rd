@@ -16,7 +16,8 @@
 }
 \usage{
 mombf(lm1, coef, g, prior.mode, theta0, logbf = FALSE)
-imombf(lm1,coef,g,prior.mode,nu=1,theta0,B=10^5)
+imombf(lm1, coef, g, prior.mode, nu = 1, theta0 , method='adapt',
+nquant=100, B = 10^5)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -35,8 +36,16 @@ imombf(lm1,coef,g,prior.mode,nu=1,theta0,B=10^5)
   \item{nu}{ Prior parameter for the inverse moment prior. See
     \code{dimom} for details. Defaults to \code{nu=1}, which Cauchy-like
     tails.}
+  \item{method}{ Numerical integration method to compute the bivariate
+    integral (only used by \code{imombf}).
+    For \code{method=='adapt'}, the inner integral is evaluated (via \code{integrate}) at a series of
+    \code{nquant} quantiles of the residual variance posterior distribution, and then
+    averaged as described in Johnson (1992).
+    Set \code{method=='MC'} to use Monte Carlo integration.}
+  \item{nquant}{ Number of quantiles at which to evaluate the integral
+    for known \code{sigma}. Only used if \code{method=='adapt'}.}
   \item{B}{Number of Monte Carlo samples to estimate the inverse moment
-    Bayes factor.}
+    Bayes factor. Only used if \code{method=='MC'}.}
 }
 \details{
   These functions actually call \code{momunknown} and
@@ -55,7 +64,10 @@ inverse moment Bayes factors.
 \code{zellnerbf} returns Bayes factors based on the Zellner-Siow g-prior.
 }
 \references{ See http://rosselldavid.googlepages.com for technical
-  reports. }
+  reports.
+For details on the quantile integration, see Johnson, V.E. A Technique for Estimating Marginal Posterior Densities in Hierarchical Models
+Using Mixtures of Conditional Densities. Journal of the American Statistical Association, Vol. 87, No. 419. (Sep., 1992), pp. 852-860.
+}
 \author{ David Rossell }
 \seealso{ \code{\link{momunknown}},
   \code{\link{imomunknown}} and \code{\link{zbfunknown}} for another interface to compute Bayes
@@ -68,10 +80,17 @@ GLMs. \code{\link{mode2g}} for prior elicitation.  }
 data(hald)
 lm1 <- lm(hald[,1] ~ hald[,2] + hald[,3] + hald[,4] + hald[,5])
 
-prior.mode <- .2
+# Set g so that prior mode for standardized effect size is at 0.2
+prior.mode <- .2^2
 V <- summary(lm1)$cov.unscaled
-gmom <- mode2g.univ(prior.mode,V[2,2],nrow(hald),prior='Mom')
-gimom <- mode2g.univ(prior.mode,V[2,2],nrow(hald),prior='iMom')
+gmom <- mode2g(prior.mode,prior='Mom')
+gimom <- mode2g(prior.mode,prior='iMom')
+
+# Set g so that interval (-0.2,0.2) has 5\% prior probability
+# (in standardized effect size scale)
+priorp <- .05; q <- .2
+gmom <- c(gmom,priorp2g(priorp=priorp,q=q,prior='Mom'))
+gimom <- c(gmom,priorp2g(priorp=priorp,q=q,prior='iMom'))
 
 mombf(lm1,coef=2,g=gmom) #moment BF
 imombf(lm1,coef=2,g=gimom,B=10^5) #inverse moment BF

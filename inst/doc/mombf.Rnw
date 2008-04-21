@@ -121,7 +121,9 @@ Currently the library only implements the case $k=1$.
 \subsection{Evaluating the Mom and iMom priors}
 
 The functions \texttt{dmom} and \texttt{dimom} evaluate the Mom and iMom priors,
-respectively.
+respectively. 
+The functions \texttt{pmom} and \texttt{pimom} evaluate the distribution functions,
+and \texttt{qmom} and \texttt{qimom} return quantiles.
 Let's set the prior parameter $g=1$ and plot the Mom and iMom priors in a univariate setting
 for $\theta_1 \in (-3,3)$. By default $\theta_0$ is set to 0, $n=1$ and $V_1=1$.
 
@@ -147,6 +149,25 @@ for $\theta_1 \in (-3,3)$. By default $\theta_0$ is set to 0, $n=1$ and $V_1=1$.
 The iMom prior density is lower than the Mom prior density 
 for $\theta_1$ values that are either in a neighborhood of 0
 or that are large in absolute value.
+We can also plot the corresponding distribution functions.
+
+
+\setkeys{Gin}{width=0.5\textwidth} 
+<<label=fig1bplot,include=FALSE>>=
+ library(mombf)
+ plot(thseq,pmom(thseq,g=g),type='l',ylab='Prior cdf')
+ lines(thseq,pimom(thseq,g=g),lty=2,col=2)
+@
+
+\begin{figure}
+\begin{center}
+<<label=fig1b,fig=TRUE,echo=FALSE>>=
+<<fig1bplot>>
+@
+\end{center}
+\caption{Moment and inverse Moment cdf for $g=1$}
+\label{fig:cdfplot}
+\end{figure}
 
 
 \section{Bayes factors for linear regression models}
@@ -168,19 +189,19 @@ summary(lm1)
 The goal is to obtain Bayes factors to assess whether any one predictor
 can be dropped from the model.
 First, we specify the prior parameter $g$ based on considerations
-about the standardized regression coefficient $\theta_1/\sigma$.
+about the standardized regression coefficient $(\theta_1/(\sigma n V_1)^2$.
 $\theta_1/\sigma$ is known as the signal-to-noise ratio,
 or as the standardized effect size.
 To find the $g$ value that gives a prior mode at $\pm .2$,
-we use the function \texttt{mode2g.univ}.
+we use the function \texttt{mode2g}.
 For instance, for the regression coefficient associated to \texttt{hald[,2]}
 we would do as follows.
 
 <<two>>=
-prior.mode <- .2
+prior.mode <- .2^2
 V <- summary(lm1)$cov.unscaled
-gmom <- mode2g.univ(prior.mode,V[2,2],nrow(hald),prior='Mom')
-gimom <- mode2g.univ(prior.mode,V[2,2],nrow(hald),prior='iMom')
+gmom <- mode2g(prior.mode,prior='Mom')
+gimom <- mode2g(prior.mode,prior='iMom')
 gmom
 gimom
 @
@@ -206,6 +227,20 @@ The prior mode for $\theta_1/\sigma$ is set at $\pm 0.2$}
 \label{fig:priorhald}
 \end{figure}
 
+Another way to specify $g$ is by finding the value that assigns a desired
+prior probability to a certain interval.
+This can be achieved with the function \texttt{priorp2g}.
+For instance, to find the $g$ value that gives 5\% probability to the interval
+(-0.2,0.2) we use the following code.
+
+
+<<twobis>>=
+a <- .2; priorp <- .05
+gmom2 <- priorp2g(priorp=priorp,q=a,prior='Mom')
+gimom2 <- priorp2g(priorp=priorp,q=-a,prior='iMom')
+gmom2
+gimom2
+@
 
 \subsection{Bayes factor computation}
 \label{ssec:bflmcomput}
@@ -214,10 +249,20 @@ Bayes factors can be easily computed using the functions
 \texttt{mombf} and \texttt{imombf}.
 The Mom BF can be computed in explicit form, whereas the
 iMom BF require numerical integration.
-The numerical integration is achieved via Monte Carlo simulation.
-The parameter \texttt{B} passed to \texttt{imombf} specifies the 
+The numerical integration can be achieved either via
+adaptive quadratures (as implemented in the routines \texttt{integrate})
+by setting \texttt{method='adapt'},
+or via Monte Carlo simulation by setting \texttt{method='MC'}.
+When $\sigma^2$ is unknown, \texttt{method=='adapt'} combines
+\texttt{integrate} with the quantile method of \cite{johnson:1992}.
+The parameter \texttt{nquant} determines the number of quantiles
+of the posterior distribution of $\sigma^2$ at which to evaluate
+the integral. The default \texttt{nquant=100} usually gives a fairly
+good approximation.
+For Monte Carlo integration, the argument \texttt{B} specifies the 
 number of Monte Carlo samples.
-For computational speed, we use \texttt{B=100000} even
+
+In our example, for computational speed we use \texttt{B=100000}, even
 though in real examples a higher value can be used
 to ensure proper accuracy.
 For comparison, we also compute the Bayes factors that
@@ -230,7 +275,8 @@ to the date this document was produced.
 <<three>>=
 set.seed(4*2*2008)
 mombf(lm1,coef=2,g=gmom)
-imombf(lm1,coef=2,g=gimom,B=10^5)
+imombf(lm1,coef=2,g=gimom,method='adapt')
+imombf(lm1,coef=2,g=gimom,method='MC',B=10^5)
 zellnerbf(lm1,coef=2,g=1)
 @
 
@@ -239,7 +285,7 @@ with a different set of Monte Carlo samples.
 We find the error to be acceptable.
 
 <<four>>=
-imombf(lm1,coef=2,g=gimom,B=10^5)
+imombf(lm1,coef=2,g=gimom,method='MC',B=10^5)
 @
 
 We now assess the sensitivity to the prior mode specification.
@@ -254,14 +300,17 @@ thest
 
 We define a sequence of prior modes, find the corresponding $g$ values 
 and compute Bayes factors.
-Note that \texttt{mombf} and \texttt{zellnerbf} accept $g$ to be a vector
-instead of a single value. This is not the case for \texttt{imombf}.
+Note that \texttt{mombf}, \texttt{imombf} and \texttt{zellnerbf} accept $g$ to be a vector
+instead of a single value.
+For large $g$ vectors setting the option \texttt{method='MC'} in \texttt{imombf} can
+save considerable computing time, as the Monte Carlo samples need only be generated
+once for all $g$ values.
 
 
 \setkeys{Gin}{width=0.5\textwidth} 
 <<label=fig3plot,include=FALSE>>=
-prior.mode <- seq(.01,1,length=100)
-gmom <- mode2g.univ(prior.mode,V[2,2],nrow(hald),prior='Mom')
+prior.mode <- seq(.01,1,length=100)^2
+gmom <- mode2g(prior.mode,prior='Mom')
 bf1 <- mombf(lm1,coef=2,g=gmom)
 bf2 <- zellnerbf(lm1,coef=2,g=gmom)
 plot(prior.mode,bf1,type='l',ylab='BF')
@@ -332,7 +381,7 @@ but they assume that \texttt{sigma} is known.
 The probit regression model that we simulated has no over-dispersion and hence
 it corresponds to \texttt{sigma=1}.
 We first compare the full model with the model resulting from excluding the second covariate,
-setting $g=1$ for illustration
+setting $g=0.5$ for illustration
 (note that \texttt{thetahat[1]} contains the intercept).
 
 <<eight>>=

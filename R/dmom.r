@@ -1,9 +1,5 @@
-dmom <- function(x,theta0,V1,g=1,n=1) {
-# x: vector or matrix with values where the density should be evaluated (each row in the matrix corresponds to a new observation)
-# theta0: location parameter
-# V1: prior covariance parameter (matrix)
-# g: prior variance parameter (scalar)
-# n: prior variance parameter (scalar). Actually only the value of n*g is taken into account
+dmom <- function(x,V1=1,g=1,n=1,theta0) {
+  
 if (is.vector(x)) {
   if (missing(theta0)) theta0 <- 0
   if (missing(V1)) V1 <- 1

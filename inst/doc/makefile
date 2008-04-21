@@ -1,15 +1,15 @@
-mombfmanual: mombf_manual.Rnw
-	echo 'Sweave("mombf_manual.Rnw")' | R --vanilla --quiet
-	pdflatex mombf_manual.tex
-	bibtex mombf_manual
-	pdflatex mombf_manual.tex
-	pdflatex mombf_manual.tex
-	rm mombf_manual.tex
-	rm mombf_manual.log
-	rm mombf_manual.aux
-	rm mombf_manual.out
-	rm mombf_manual.blg
-	rm mombf_manual.bbl
-	rm mombf_manual-fig*.pdf
-	rm mombf_manual-fig*.eps
+mombfmanual: mombf.Rnw
+	echo 'Sweave("mombf.Rnw")' | R --vanilla --quiet
+	pdflatex mombf.tex
+	bibtex mombf
+	pdflatex mombf.tex
+	pdflatex mombf.tex
+	rm mombf.tex
+	rm mombf.log
+	rm mombf.aux
+	rm mombf.out
+	rm mombf.blg
+	rm mombf.bbl
+	rm mombf-fig*.pdf
+	rm mombf-fig*.eps
 	rm Rplots.ps

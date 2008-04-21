@@ -20,11 +20,15 @@
 }
 \usage{
 momknown(theta1hat, V1, n, g = 1, theta0, sigma, logbf = FALSE)
-momunknown(theta1hat,V1,n,nuisance.theta,g=1,theta0,ssr,logbf=FALSE)
-imomknown(theta1hat,V1,n,nuisance.theta,g=1,nu=1,theta0,sigma,B=10^5)
-imomunknown(theta1hat,V1,n,nuisance.theta,g=1,nu=1,theta0,ssr,B=10^5)
-zbfknown(theta1hat,V1,n,g=1,theta0,sigma,logbf=FALSE)
-zbfunknown(theta1hat,V1,n,nuisance.theta,g=1,theta0,ssr,logbf=FALSE)
+momunknown(theta1hat, V1, n, nuisance.theta, g = 1, theta0, ssr, logbf =
+FALSE)
+imomknown(theta1hat, V1, n, nuisance.theta, g = 1, nu = 1, theta0,
+sigma, method='adapt', B=10^5)
+imomunknown(theta1hat, V1, n, nuisance.theta, g = 1, nu = 1, theta0,
+ssr, method='adapt', nquant = 100, B = 10^5)
+zbfknown(theta1hat, V1, n, g = 1, theta0, sigma, logbf = FALSE)
+zbfunknown(theta1hat, V1, n, nuisance.theta, g = 1, theta0, ssr, logbf =
+FALSE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -44,8 +48,19 @@ zbfunknown(theta1hat,V1,n,nuisance.theta,g=1,theta0,ssr,logbf=FALSE)
   \item{nu}{ Prior parameter for the inverse moment prior. See
     \code{dimom} for details. Defaults to \code{nu=1}, which Cauchy-like
     tails.}
+  \item{method}{ Numerical integration method (only used by
+    \code{imomknown} and \code{imomunknown}).
+    Set \code{method=='adapt'} in \code{imomknown} to integrate using adaptive
+    quadrature of functions as implemented in the function
+    \code{integrate}. In \code{imomunknown} the integral is evaluated as in
+    \code{imomknown} at a series of
+    \code{nquant} quantiles of the posterior for \code{sigma}, and then
+    averaged as described in Johnson (1992).
+    Set \code{method=='MC'} to use Monte Carlo integration.}
+  \item{nquant}{ Number of quantiles at which to evaluate the integral
+    for known \code{sigma}. }
   \item{B}{Number of Monte Carlo samples to estimate the inverse moment
-    Bayes factor.}  
+    Bayes factor. Ignored if \code{method!='MC'}.}  
 }
 \details{
   See \code{dmom} and \code{dimom} for details on the moment and inverse
@@ -62,7 +77,10 @@ inverse moment Bayes factors.
 \code{zbfknown} and \code{zbfunknown} return Bayes factors based on the Zellner-Siow g-prior.
 }
 \references{ See http://rosselldavid.googlepages.com for technical
-  reports. }
+  reports.
+  
+For details on the quantile integration, see Johnson, V.E. A Technique for Estimating Marginal Posterior Densities in Hierarchical Models
+Using Mixtures of Conditional Densities. Journal of the American Statistical Association, Vol. 87, No. 419. (Sep., 1992), pp. 852-860.}
 \author{ David Rossell }
 \seealso{ \code{\link{mombf}} and
   \code{\link{imombf}} for a simpler interface to compute Bayes
