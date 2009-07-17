@@ -16,7 +16,7 @@
   moment and inverse moment priors.
 }
 \usage{
-dmom(x, V1 = 1, g = 1, n = 1, theta0)
+dmom(x, V1 = 1, g = 1, n = 1, theta0, baseDensity = "normal", nu = 3)
 dimom(x, V1 = 1, g = 1, n = 1, nu = 1, theta0, logscale = FALSE)
 pmom(q, V1 = 1, g = 1, n = 1)
 pimom(q, V1 = 1, g = 1, n = 1, nu = 1)
@@ -35,16 +35,23 @@ qimom(p, V1 = 1, g = 1, n = 1, nu = 1)
     the identity matrix in the multivariate setting. }
   \item{g}{ Prior parameter. See details. }
   \item{n}{ Prior parameter. See details. }
-  \item{nu}{ Prior parameter. The
+  \item{baseDensity}{For \code{baseDensity=='normal'} a normal MOM prior
+  is used, for \code{baseDensity=='t'} a T MOM prior with \code{nu}
+  degrees of freedom is used.}
+  \item{nu}{ Prior parameter indicating the degrees of freedom for the T
+    MOM and iMOM prior densities. The
     tails of the inverse moment prior are proportional to the tails of a
     multivariate T with \code{nu} degrees of freedom.}
   \item{logscale}{ For \code{logscale==TRUE}, \code{dimom} returns the
     natural log of the prior density.} 
 }
 \details{
- Define the quadratic form \eqn{q(theta)= (theta-theta0)' * V1^{-1} * (theta-theta0) / (n*g)}.
-   The moment prior density is proportional to
+ Define the quadratic form q(theta)= (theta-theta0)' *
+   solve(V1) * (theta-theta0) / (n*g).
+   The normal moment prior density is proportional to
    q(theta)*dmvnorm(theta,theta0,n*g*V1).
+   The T moment prior is proportional to
+   q(theta)*dmvt(theta,theta0,n*g*V1,df=nu).
    The inverse moment prior density is proportional to
    \code{q(theta)^(-(nu+d)/2) * exp(-1/q(theta))}.
    pmom, pimom and qimom use closed-form expressions, while qmom uses

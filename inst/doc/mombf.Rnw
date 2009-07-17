@@ -2,6 +2,7 @@
 %\VignetteIndexEntry{Manual for the gaga library}
 %\VignettePackage{gaga}
 
+\usepackage{Sweave}
 \usepackage{amsmath}    % need for subequations
 \usepackage{amssymb}    %useful mathematical symbols
 \usepackage{bm}         %needed for bold greek letters and math symbols
@@ -46,7 +47,9 @@
 
 This manual shows how to use the \texttt{mombf} library to compute
 Moment and inverse Moment Bayes factors (Mom BF and iMom BF, respectively).
-The appeal of Mom and iMom BF is that, when the null hypothesis is true,
+The intuitive appeal of Mom and iMom BF is that they represent prior beliefs under the alternative hypothesis
+which are fundamentally different from those under the null hypothesis.
+Mathematically, when the null hypothesis is true
 they present better convergence rates than BF resulting from most standard procedures.
 When the alternative hypothesis is true, they present the same convergence rates
 as most standard procedures.
@@ -88,16 +91,27 @@ an independent improper prior on $\sigma^2$ proportional to $1/\sigma$.
 \subsection{Mom prior}
 \label{ssec:momprior}
 
-Let $\pi_Z$ denote the g-prior of \cite{zellner:1980},
-{\it i.e.} $\pi_Z(\bm{\theta}_1)=N(\bm{\theta}_0,n g \sigma^2 V_1)$.
+
+Let $\pi_Z(\bm{\theta}_1)$ be a prior density for $\bm{\theta}_1$
+for which $E_{\pi_Z}[Q(\bm{\theta}_1)^k]$ is finite.
 We define the multivariate Mom prior as
 \begin{equation}
 \pi_M(\bm{\theta}_1)= \frac{Q(\bm{\theta}_1)^k}{E_{\pi_Z}[Q(\bm{\theta}_1)^k]}  \pi_Z(\bm{\theta}_1).
 \label{multimoment}
 \end{equation}
-, where $E_{\pi_Z}(Q(\bm{\theta})^k)= \prod_{i=0}^{k-1} (p_1+2i)$ is the $k^{th}$ 
+The package currently implements normal MOM priors
+(where $\pi_Z$ is the g-prior of \cite{zellner:1980},
+{\it i.e.} $\pi_Z(\bm{\theta}_1)=N(\bm{\theta}_0,n g \sigma^2 V_1)$)
+and T MOM priors
+(where $\pi_Z$ is a multivariate T with $\nu \geq 3$ degrees of freedom).
+Both for normal and T MOM priors only the case $k=1$ is currently implemented.
+For the normal MOM prior the normalization constant is
+$E_{\pi_Z}(Q(\bm{\theta})^k)= \prod_{i=0}^{k-1} (p_1+2i)$, i.e. the $k^{th}$ 
 raw moment of a chi-square distribution with $p_1$ degrees of freedom.
-Currently the library only implements the case $k=1$, {\it i.e.} $E_{\pi_Z}(Q(\bm{\theta})^k)=1$.
+For $k=1$ this simplifies to $E_{\pi_Z}(Q(\bm{\theta})^k)=1$.
+For the T MOM prior and $k=1$ the normalization constant is 
+$E_{\pi_Z}(Q(\bm{\theta})^k)= d \frac{\nu}{\nu-2}$.
+
 
 \subsection{iMom prior}
 \label{ssec:imomprior}
@@ -121,9 +135,12 @@ Currently the library only implements the case $k=1$.
 \subsection{Evaluating the Mom and iMom priors}
 
 The functions \texttt{dmom} and \texttt{dimom} evaluate the Mom and iMom priors,
-respectively. 
+respectively.
+Setting the argument \texttt{baseDensity='normal'} in \texttt{dmom} (the default) returns
+the normal MOM density, \texttt{baseDensity='t'} returns the t MOM density.
 The functions \texttt{pmom} and \texttt{pimom} evaluate the distribution functions,
 and \texttt{qmom} and \texttt{qimom} return quantiles.
+Currently \texttt{pmom} and \texttt{qmom} are only implemented for the normal MOM.
 Let's set the prior parameter $g=1$ and plot the Mom and iMom priors in a univariate setting
 for $\theta_1 \in (-3,3)$. By default $\theta_0$ is set to 0, $n=1$ and $V_1=1$.
 
@@ -133,7 +150,8 @@ for $\theta_1 \in (-3,3)$. By default $\theta_0$ is set to 0, $n=1$ and $V_1=1$.
  g <- 1
  thseq <- seq(-3,3,length=1000)
  plot(thseq,dmom(thseq,g=g),type='l',ylab='Prior density')
- lines(thseq,dimom(thseq,g=g),lty=2,col=2)
+ lines(thseq,dmom(thseq,g=g,baseDensity='t',nu=3),lty=2,col=2)
+ lines(thseq,dimom(thseq,g=g),lty=3,col=3)
 @
 
 \begin{figure}
@@ -146,9 +164,8 @@ for $\theta_1 \in (-3,3)$. By default $\theta_0$ is set to 0, $n=1$ and $V_1=1$.
 \label{fig:priorplot}
 \end{figure}
 
-The iMom prior density is lower than the Mom prior density 
-for $\theta_1$ values that are either in a neighborhood of 0
-or that are large in absolute value.
+The iMOM prior assigns the lowest density for $\theta_1$ in a neighborhood of 0,
+whereas the normal MOM prior assigns the largest density.
 We can also plot the corresponding distribution functions.
 
 
@@ -156,7 +173,7 @@ We can also plot the corresponding distribution functions.
 <<label=fig1bplot,include=FALSE>>=
  library(mombf)
  plot(thseq,pmom(thseq,g=g),type='l',ylab='Prior cdf')
- lines(thseq,pimom(thseq,g=g),lty=2,col=2)
+ lines(thseq,pimom(thseq,g=g),lty=3,col=3)
 @
 
 \begin{figure}
@@ -200,9 +217,12 @@ we would do as follows.
 <<two>>=
 prior.mode <- .2^2
 V <- summary(lm1)$cov.unscaled
-gmom <- mode2g(prior.mode,prior='Mom')
+diag(V)
+gmom <- mode2g(prior.mode,prior='normalMom')
+gtmom <- mode2g(prior.mode,prior='tMom',nu=3)
 gimom <- mode2g(prior.mode,prior='iMom')
 gmom
+gtmom
 gimom
 @
 
@@ -212,8 +232,8 @@ We can check the obtained $g$ values by plotting the prior density.
 <<label=fig2plot,include=FALSE>>=
 thseq <- seq(-1,1,length=1000)
 plot(thseq,dmom(thseq,V1=V[2,2],g=gmom,n=nrow(hald)),type='l',xlab='theta/sigma',ylab='Prior density')
-lines(thseq,dimom(thseq,V1=V[2,2],g=gimom,n=nrow(hald)),lty=2,col=2)
-abline(v=c(-prior.mode,prior.mode),lty=2)
+lines(thseq,dmom(thseq,V1=V[2,2],g=gtmom,n=nrow(hald),baseDensity='t',nu=3),lty=2,col=2)
+lines(thseq,dimom(thseq,V1=V[2,2],g=gimom,n=nrow(hald)),lty=3,col=3)
 @
 
 \begin{figure}
@@ -236,7 +256,7 @@ For instance, to find the $g$ value that gives 5\% probability to the interval
 
 <<twobis>>=
 a <- .2; priorp <- .05
-gmom2 <- priorp2g(priorp=priorp,q=a,prior='Mom')
+gmom2 <- priorp2g(priorp=priorp,q=a,prior='normalMom')
 gimom2 <- priorp2g(priorp=priorp,q=-a,prior='iMom')
 gmom2
 gimom2
@@ -247,8 +267,9 @@ gimom2
 
 Bayes factors can be easily computed using the functions
 \texttt{mombf} and \texttt{imombf}.
-The Mom BF can be computed in explicit form, whereas the
-iMom BF require numerical integration.
+The normal Mom BF can be computed in explicit form, 
+the T MOM BF require computing a one dimensional integral and
+the iMom BF a two dimensional integral (regardless of the dimensionality of $\bm{\theta}_1$).
 The numerical integration can be achieved either via
 adaptive quadratures (as implemented in the routines \texttt{integrate})
 by setting \texttt{method='adapt'},
@@ -275,6 +296,7 @@ to the date this document was produced.
 <<three>>=
 set.seed(4*2*2008)
 mombf(lm1,coef=2,g=gmom)
+mombf(lm1,coef=2,g=gtmom,baseDensity='t')
 imombf(lm1,coef=2,g=gimom,method='adapt')
 imombf(lm1,coef=2,g=gimom,method='MC',B=10^5)
 zellnerbf(lm1,coef=2,g=1)
@@ -289,7 +311,7 @@ imombf(lm1,coef=2,g=gimom,method='MC',B=10^5)
 @
 
 We now assess the sensitivity to the prior mode specification.
-For illustration purposes, we exclude the iMom BF as these take longer to compute.
+For illustration purposes, we exclude the T MOM and iMom BF as these take longer to compute.
 The estimated standardized regression coefficient is
 
 <<five>>=
@@ -310,7 +332,7 @@ once for all $g$ values.
 \setkeys{Gin}{width=0.5\textwidth} 
 <<label=fig3plot,include=FALSE>>=
 prior.mode <- seq(.01,1,length=100)^2
-gmom <- mode2g(prior.mode,prior='Mom')
+gmom <- mode2g(prior.mode,prior='normalMom')
 bf1 <- mombf(lm1,coef=2,g=gmom)
 bf2 <- zellnerbf(lm1,coef=2,g=gmom)
 plot(prior.mode,bf1,type='l',ylab='BF')

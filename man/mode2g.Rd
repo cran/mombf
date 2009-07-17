@@ -23,13 +23,14 @@ priorp2g(priorp, q, nu = 1, prior = 'iMom')
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{prior.mode}{ Prior mode for the quadratic form
-    \eqn{q(theta)= (theta-theta0)' * V1^{-1} * (theta-theta0) / (n*g)},
+    (theta-theta0)' * solve(Sigma) * (theta-theta0)/(n*g*sigma^2),
      where sigma is the dispersion parameter and Sigma is given by the
      design matrix.  }
-  \item{prior}{ \code{prior=='Mom'} does computations for the moment
-    prior. \code{prior=='iMom'} does computations for the inverse moment
-    prior. }
-  \item{nu}{ Prior parameter (only used if \code{prior=='iMom'}).}
+  \item{prior}{ \code{prior=='normalMom'} does computations for the normal moment
+    prior, \code{prior=='tMom'} for the T moment prior, \code{prior=='iMom'} does computations for the inverse moment
+    prior. Currently \code{prior=='tMom'} is not implemented in \code{priorp2g}.}
+  \item{nu}{ Prior degrees of freedom for the T moment prior or the iMom
+    prior (ignored if \code{prior=='normalMom'}).}
   \item{dim}{ Dimensionality of the parameter, i.e. \code{dim==1} for
     univariate, \code{dim==2} for bivariate and so on. }
   \item{g}{ Prior parameter. See \code{dimom} for details. }
@@ -59,14 +60,15 @@ priorp2g(priorp, q, nu = 1, prior = 'iMom')
 data(hald)
 lm1 <- lm(hald[,1] ~ hald[,2] + hald[,3] + hald[,4] + hald[,5])
 prior.mode <- .2
-gmom <- mode2g(prior.mode^2,prior='Mom')
+gmom <- mode2g(prior.mode^2,prior='normalMom')
+gtmom <- mode2g(prior.mode^2,prior='tMom',nu=3)
 gimom <- mode2g(prior.mode^2,prior='iMom')
 gmom
 gimom
 
 #find g value giving 0.05 probability to interval (-.2,.2)
 priorp <- .05; q <- .2
-gmom <- priorp2g(priorp=priorp,q=q,prior='Mom')
+gmom <- priorp2g(priorp=priorp,q=q,prior='normalMom')
 gimom <- priorp2g(priorp=priorp,q=q,prior='iMom')
 gmom
 gimom

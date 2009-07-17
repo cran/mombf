@@ -15,7 +15,8 @@
   prior (used to build the moment prior).
 }
 \usage{
-mombf(lm1, coef, g, prior.mode, theta0, logbf = FALSE)
+mombf(lm1, coef, g, prior.mode, baseDensity='normal', nu=3, theta0,
+logbf=FALSE, B=10^5)
 imombf(lm1, coef, g, prior.mode, nu = 1, theta0 , method='adapt',
 nquant=100, B = 10^5)
 }
@@ -29,13 +30,20 @@ nquant=100, B = 10^5)
     \code{dimom} for details. }
   \item{prior.mode}{ If specified, \code{g} is determined by calling
     \code{g2mode}. }
+  \item{baseDensity}{Density upon which the Mom prior is
+    based. \code{baseDensity=='normal'} results in the normal Mom prior,
+  \code{baseDensity=='t'} in the t Mom prior with \code{nu} degrees of freedom.}
+  \item{nu}{For \code{mombf}, \code{nu} specifies the degrees of freedom
+    of the t Mom prior. It is ignored unless
+    \code{baseDensity=='t'}. \code{nu} defaults to 3.
+    For \code{imombf}, \code{nu} specifies the degrees of freedom for
+    the inverse moment prior (see
+    \code{dimom} for details). Defaults to \code{nu=1}, which Cauchy-like
+    tails.}
   \item{theta0}{ Null value for the regression coefficients. Defaults to
     0. }
   \item{logbf}{ If \code{logbf==TRUE} the natural logarithm of the Bayes
     factor is returned.}
-  \item{nu}{ Prior parameter for the inverse moment prior. See
-    \code{dimom} for details. Defaults to \code{nu=1}, which Cauchy-like
-    tails.}
   \item{method}{ Numerical integration method to compute the bivariate
     integral (only used by \code{imombf}).
     For \code{method=='adapt'}, the inner integral is evaluated (via \code{integrate}) at a series of
@@ -44,8 +52,8 @@ nquant=100, B = 10^5)
     Set \code{method=='MC'} to use Monte Carlo integration.}
   \item{nquant}{ Number of quantiles at which to evaluate the integral
     for known \code{sigma}. Only used if \code{method=='adapt'}.}
-  \item{B}{Number of Monte Carlo samples to estimate the inverse moment
-    Bayes factor. Only used if \code{method=='MC'}.}
+  \item{B}{Number of Monte Carlo samples to estimate the T Mom and the inverse moment
+    Bayes factor. Only used in \code{mombf} if \code{baseDensity=='t'}. Only used in \code{imombf} if \code{method=='MC'}.}
 }
 \details{
   These functions actually call \code{momunknown} and
@@ -83,13 +91,13 @@ lm1 <- lm(hald[,1] ~ hald[,2] + hald[,3] + hald[,4] + hald[,5])
 # Set g so that prior mode for standardized effect size is at 0.2
 prior.mode <- .2^2
 V <- summary(lm1)$cov.unscaled
-gmom <- mode2g(prior.mode,prior='Mom')
+gmom <- mode2g(prior.mode,prior='normalMom')
 gimom <- mode2g(prior.mode,prior='iMom')
 
 # Set g so that interval (-0.2,0.2) has 5\% prior probability
 # (in standardized effect size scale)
 priorp <- .05; q <- .2
-gmom <- c(gmom,priorp2g(priorp=priorp,q=q,prior='Mom'))
+gmom <- c(gmom,priorp2g(priorp=priorp,q=q,prior='normalMom'))
 gimom <- c(gmom,priorp2g(priorp=priorp,q=q,prior='iMom'))
 
 mombf(lm1,coef=2,g=gmom) #moment BF
