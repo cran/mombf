@@ -1,6 +1,6 @@
-qmom <- function(p,V1=1,g=1,n=1) {
+qmom <- function(p,V1=1,tau=1) {
 
-  e <- function(q) { return((pmom(q,V1,g,n)-pneg)^2) }
+  e <- function(q) { return((pmom(q,V1,tau)-pneg)^2) }
   ans <- double(length(p))
   for (i in 1:length(p)) {
     pneg <- ifelse(p[i]<=.5,p[i],1-p[i])

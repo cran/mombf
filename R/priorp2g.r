@@ -1,7 +1,7 @@
 priorp2g <- function(priorp,q,nu=1,prior="iMom") {
   if (!(prior %in% c('normalMom','tMom','iMom'))) stop("Currently only prior=='normalMom', 'tMom' or 'iMom' are implemented")
   if (prior == "normalMom") {
-    e <- function(logg) { return((1-2*pmom(-abs(q),g=exp(logg))-priorp[i])^2) }
+    e <- function(logg) { return((1-2*pmom(-abs(q),tau=exp(logg))-priorp[i])^2) }
     ans <- double(length(priorp))
     for (i in 1:length(priorp)) {
       ans[i] <- exp(nlminb(start=0,objective=e)$par)

@@ -1,42 +1,5 @@
-export( mode2g,
+useDynLib(mombf)
 
-        g2mode,
+export(mode2g, g2mode, priorp2g, mombf, mombf.lm, imombf, imombf.lm, momknown, momunknown, imomknown, imomunknown, zellnerbf, zellnerbf.lm, zbfknown, zbfunknown, pmom, pimom, qmom, qimom, dmom, dimom, pimomMarginalK, pimomMarginalU, modelSelection, pmomMarginalK, pmomMarginalU)
 
-        priorp2g,
-
-        mombf,
-
-        mombf.lm,
-
-        imombf,
-
-        imombf.lm,
-
-        momknown,
-
-        momunknown,
-
-        imomknown,
-
-        imomunknown,
-
-        zellnerbf,
-
-        zellnerbf.lm,
-
-        zbfknown,
-
-        zbfunknown,
-
-        pmom,
-
-        pimom,
-
-        qmom,
-
-        qimom,
-
-        dmom,
-
-        dimom )
-
+#exportClasses("msPriorSpec")
