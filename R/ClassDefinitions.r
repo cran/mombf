@@ -22,7 +22,10 @@ setValidity("msPriorSpec", function(object){
       if (!any(object@priorDistr %in% c('uniform','binomial'))) {
         msg <- "priorDistr must be 'uniform' or 'binomial'"
       } else {
-        if (object@priorDistr=='binomial') { if (names(object@priorPars)!='p') msg <- "priorPars must contain an element named 'p'" }
+        if (object@priorDistr=='binomial') {
+          n <- c('p','alpha.p','beta.p') %in% names(object@priorPars)
+          if ((!n[1]) & (!all(n[-1]))) msg <- "For priorDistr=='binomial' either 'p' or 'alpha.p' and 'beta.p' must be specified in priorPars"
+        }
       }
       
     } else {

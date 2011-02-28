@@ -73,19 +73,27 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
   if (priorDelta@priorDistr=='uniform') {
     prDelta <- as.integer(0)
     prDeltap <- as.double(0)
-  } else if (priorDelta@priorDist=='binomial') {
-    prDelta <- as.integer(1)
-    prDeltap <- as.double(priorDelta@priorPars['p'])
-    if ((prDeltap<=0) | (prDeltap>=1)) stop("p must be between 0 and 1 for priorDelta@priorDist=='binomial'")
+    parprDeltap <- double(2)
+  } else if (priorDelta@priorDistr=='binomial') {
+    if ('p' %in% priorDelta@priorPars) {
+      prDelta <- as.integer(1)
+      prDeltap <- as.double(priorDelta@priorPars['p'])
+      if ((prDeltap<=0) | (prDeltap>=1)) stop("p must be between 0 and 1 for priorDelta@priorDistr=='binomial'")
+      parprDeltap <- double(2)
+    } else {
+      prDelta <- as.integer(2)
+      prDeltap <- as.double(.5)
+      parprDeltap <- as.double(priorDelta@priorPars[c('alpha.p','beta.p')])
+    }
   } else {
     stop('Prior specified in priorDelta not recognized')
   }
 
   #Initialize
-  postMode <- rep(as.integer(0),p); postModeProb <- double(1)
+  postMode <- rep(as.integer(0),p); othersMode <- double(1); postModeProb <- double(1)
   if (initSearch=='greedy') {
     niterGreed <- as.integer(100)
-    ans <- .Call("greedyVarSelCI", postMode,postModeProb,knownphi,prior,niterGreed,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,as.integer(verbose))
+    ans <- .Call("greedyVarSelCI", postMode,othersMode,postModeProb,knownphi,prior,niterGreed,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
     ndeltaini <- as.integer(sum(postMode)); deltaini <- as.integer(which(as.logical(postMode))-1)
   } else if (initSearch=='SCAD') {
     require(ncvreg)
@@ -100,29 +108,44 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
   #Run MCMC
   mcmc2save <- floor((niter-burnin)/thinning)
   postSample <- rep(as.integer(0),p*mcmc2save)
+  if (prDelta==2) postOther <- double(mcmc2save) else postOther <- double(0)
   margpp <- double(p); postProb <- double(mcmc2save)
-  ans <- .Call("modelSelectionCI", postSample,margpp,postMode,postModeProb,postProb,knownphi,prior,niter,thinning,burnin,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,as.integer(verbose))
+  ans <- .Call("modelSelectionCI", postSample,postOther,margpp,postMode,postModeProb,postProb,knownphi,prior,niter,thinning,burnin,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
   postSample <- matrix(postSample,ncol=p)
-  return(list(postSample=postSample,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb))
+  return(list(postSample=postSample,postOther=postOther,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb))
 }
 
-modelSelectionR <- function(y, x, niter=10^4, marginalFunction, priorFunction, deltaini=rep(FALSE,ncol(x)), verbose=TRUE, ...) {
+modelSelectionR <- function(y, x, niter=10^4, marginalFunction, priorFunction, betaBinPrior, deltaini=rep(FALSE,ncol(x)), verbose=TRUE, ...) {
 # Input
 # - y: vector with response variable
 # - x: design matrix with all potential predictors
 # - niter: number of Gibbs sampling iterations
 # - marginalFunction: function to compute the marginal density of the data under each model
 # - priorFunction: function to compute the model prior probability
+# - betaBinPrior: if specified, priorFunction argument is ignored and set to a binomial prior with Beta-hyperprior for the success prob. betaBinPrior should be a vector with named elements 'alpha.p' and 'beta.p', e.g. betaBinPrior= c(alpha.p=1,beta.p=1)
 # - deltaini: logical vector of length ncol(x) indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model
 # ...: other arguments to be passed on to marginalFunction
 # Output: list
-# - postSample: posterior samples
+# - postSample: posterior samples for model indicator
+# - postOther: posterior samples for other parameters (probBin: success probability for Binomial prior on number of coefficients in the model)
 # - margpp: marginal posterior probability for inclusion of each covariate (approx by averaging marginal post prob for inclusion in each Gibbs iteration. This approx is more accurate than simply taking colMeans(postSample))
 # - postMode: model with highest posterior probability amongst all those visited
 # - postModeProb: unnormalized posterior prob of posterior mode (log scale)
 # - postProb: unnormalized posterior prob of each visited model (log scale)
 p <- ncol(x)
 if (length(deltaini)!=p) stop('deltaini must be of length ncol(x)')
+if (!missing(betaBinPrior)) {
+  #Initialize probBin
+  if ((betaBinPrior['alpha.p']>1) && (betaBinPrior['beta.p']>1)) {
+    probBin <- (betaBinPrior['alpha.p']-1)/(betaBinPrior['alpha.p']+betaBinPrior['beta.p']-2)
+  } else {
+    probBin <- (betaBinPrior['alpha.p'])/(betaBinPrior['alpha.p']+betaBinPrior['beta.p'])
+  }
+  postOther <- matrix(NA,nrow=niter,ncol=1); colnames(postOther) <- c('probBin')
+  priorFunction <- function(sel, logscale=TRUE) dbinom(x=sum(sel),size=length(sel),prob=probBin,log=logscale)
+} else {
+  postOther <- matrix(NA,nrow=niter,ncol=0)
+}
 sel <- postMode <- deltaini
 currentM <- marginalFunction(y=y,x=x[,sel,drop=FALSE],logscale=TRUE,...)
 currentP <- priorFunction(sel,logscale=TRUE)
@@ -154,10 +177,14 @@ for (i in 1:niter) {
       currentP <- newP
     }
   }
+  if (!missing(betaBinPrior)) {
+    probBin <- rbeta(1,betaBinPrior['alpha.p']+sum(sel), betaBinPrior['beta.p']+sum(!sel))
+    postOther[i,'probBin'] <- probBin
+  }
   postSample[i,] <- sel
   postProb[i] <- currentM + currentP
   if (verbose && ((i%%niter10)==0)) cat('.')
 }
 if (verbose) cat('\n')
-return(list(postSample=postSample,margpp=margpp/niter,postMode=postMode,postModeProb=postModeProb,postProb=postProb))
+return(list(postSample=postSample,postOther=postOther,margpp=margpp/niter,postMode=postMode,postModeProb=postModeProb,postProb=postProb))
 }

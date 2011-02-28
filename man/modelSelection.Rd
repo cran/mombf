@@ -72,6 +72,10 @@ A list with elements
   indicator. \code{postSample[i,j]==1}
   indicates that variable j was included in the model in the MCMC
   iteration i}
+\item{postOther}{\code{postOther}
+  returns posterior samples for parameters other than the model
+  indicator, i.e. basically hyper-parameters.
+  If hyper-parameters were fixed in the model specification, \code{postOther} will be empty.}
 \item{margpp}{Marginal posterior probability for inclusion of each
   covariate. This is computed by averaging marginal post prob for
   inclusion in each Gibbs iteration, which is much more accurate than
@@ -101,6 +105,15 @@ y <- x \%*\% theta + rnorm(100)
 priorCoef <- new("msPriorSpec",priorType='coefficients',priorDistr='piMOM',priorPars=c(tau=1))
 priorDelta <- new("msPriorSpec",priorType='modelIndicator',priorDistr='uniform',priorPars=double(0))
 priorVar <- new("msPriorSpec",priorType='nuisancePars',priorDistr='invgamma',priorPars=c(alpha=.01,lambda=.01))
+
+#Alternative prior for model space: 0.5 prior prob for including any covariate
+priorDelta <-
+new("msPriorSpec",priorType='modelIndicator',priorDistr='binomial',priorPars=c(p=.5))
+
+#Alternative prior for model space: Beta hyper-prior for prob of inclusion
+priorDelta <-
+new("msPriorSpec",priorType='modelIndicator',priorDistr='binomial',priorPars=c(alpha.p=1,beta.p=1))
+
 
 #Model selection
 fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE, niter=10^2,

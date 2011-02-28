@@ -21,6 +21,7 @@ that the prior is for the non-zero regression coefficients.
 and \code{"nuisancePars"} that it is for the nuisance parameteres.
 Several prior distributions are available for each choice of \code{priorType},
 and these can be speicified in the slot \code{priorDist}. }
+
     \item{\code{priorDistr}:}{Object of class \code{"character"}.
 If \code{priorType=="coefficients"}, \code{priorDistr} can be equal to "pMOM", "piMOM", or "peMOM"
 (product moment, product inverse moment or product exponential moment prior, respectively).
@@ -28,13 +29,16 @@ If \code{priorType=="modelIndicator"}, \code{priorDistr} can be equal to "unifor
 to specify a uniform prior (all models equaly likely a priori) or a binomial prior. For a binomial prior,
 the prior inclusion probability for any single variable must be specified in slot \code{priorPars}.
 If \code{priorType=="nuisancePars"}, \code{priorDistr} must be equal to "invgamma". This corresponds to an
-inverse gamma distribution for the residual variance, with parameters specified in the slot \code{priorPars}.}
+inverse gamma distribution for the residual variance, with parameters
+specified in the slot \code{priorPars}.}
+
     \item{\code{priorPars}:}{Object of class \code{"vector"}, where each element must be named.
 For \code{priorDistr=='pMOM'}, there must be elements "tau" and "r". 
 For \code{priorDistr=='piMOM'} and \code{priorDistr=='pMOM'} there must be an element "tau".
 "tau" corresponds to the prior dispersion, and "r" to the MOM power parameter.
-For \code{priorDistr=='binomial'}, there must be an element "p" specifying the prior inclusion probability
-for any single covariate.
+For \code{priorDistr=='binomial'}, there must be either an element "p" specifying the prior inclusion probability
+for any single covariate, or a vector with elements "alpha.p" and
+"beta.p" specifying a Beta(alpha.p,beta.p) hyper-prior on p.
 For \code{priorDistr=='invgamma'} there must be elements "alpha" and "lambda". The prior for the residual variance
 is an inverse gamma with parameteres \code{.5*alpha} and \code{.5*lambda}.
   }

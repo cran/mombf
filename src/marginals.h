@@ -22,6 +22,7 @@ struct marginalPars {
   double *tau;      //coefficients prior dispersion parameter
   int *r;           //MOM power parameter for prior on coefficients
   double *prDeltap; //For Binomial prior on model space, prDeltap is the prob of success
+  double *parprDeltap; //For Binomial prior on model space with unknown success prob, parprDeltap are the Beta hyper-parameters
   int *logscale;
 };
 
@@ -37,7 +38,7 @@ void Asym_xsel(double **A, int fi, double *x, int *sel, double *ans);  //multipl
 void addct2XtX(double *ct, double *XtX, int *sel, int *nsel, int *p, double **V); //add constant to diagonal elem of XtX
 
 //General marginal density calculation routines
-void set_marginalPars(struct marginalPars *pars, int *n,int *p,double *y,double *sumy2,double *x,double *XtX,double *ytX,int *method,int *B,double *alpha,double *lambda,double *phi,double *tau,int *r,double *prDeltap, int *logscale);
+void set_marginalPars(struct marginalPars *pars, int *n,int *p,double *y,double *sumy2,double *x,double *XtX,double *ytX,int *method,int *B,double *alpha,double *lambda,double *phi,double *tau,int *r,double *prDeltap,double *parprDeltap, int *logscale);
 void set_f2opt_pars(double *m, double **S, double *XtX, double *ytX, double *phi, double *tau, int *r, int *n, int *p, int *sel, int *nsel);
 void set_f2int_pars(double *XtX, double *ytX, double *tau, int *n, int *p, int *sel, int *nsel, double *y, double *sumy2, int *method, int *B, double *alpha, double *lambda, int *logscale);
 
@@ -45,8 +46,8 @@ void set_f2int_pars(double *XtX, double *ytX, double *tau, int *n, int *p, int *
 // Model Selection Routines
 //*************************************************************************************
 
-void modelSelectionC(int *postSample, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
-void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
+void modelSelectionC(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
+void greedyVarSelC(int *postMode, double *othersMode, double *postModeProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
 pt2margFun set_marginalFunction(int *prCoef, int *knownphi);
 pt2margFun set_priorFunction(int *prDelta);
 void sel2selnew(int newelem,int *sel,int *nsel,int *selnew,int *nselnew);

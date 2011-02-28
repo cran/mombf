@@ -1,6 +1,6 @@
 Package: mombf
-Version: 1.1.1
-Date: 2011-01-24
+Version: 1.1.2
+Date: 2011-02-28
 Title: Moment and Inverse Moment Bayes factors
 Author: David Rossell <rosselldavid@gmail.com>.
 Maintainer: David Rossell <rosselldavid@gmail.com>
@@ -19,6 +19,6 @@ Collate: ClassDefinitions.r imombf.r mode2g.r pimom.r
         margpimom.r mombf.lm.r qimom.r zellnerbf.unknownsig.r dmom.r
         mombf.r qmom.r g2mode.r margpmom.r momknown.r zbfknown.r
         imombf.lm.r momunknown.r zbfunknown.r
-Packaged: 2011-01-24 08:15:08 UTC; drossell
+Packaged: 2011-02-28 09:52:46 UTC; drossell
 Repository: CRAN
-Date/Publication: 2011-01-24 18:31:52
+Date/Publication: 2011-02-28 10:31:31

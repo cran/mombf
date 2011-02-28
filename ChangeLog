@@ -1,3 +1,10 @@
+CHANGES IN VERSION 1.1.2
+- Removed makefile from inst/doc
+- Added hierarchical Beta-Binomial prior for model space indicator in modelSelection
+
+CHANGES IN VERSION 1.1.1
+- Fixed some C warnings due to uninitialized variables
+
 CHANGES IN VERSION 1.1.0
 - Product MOM and iMOM priors now implemented
 - Linear model variable selection for MOM and iMOM priors implemented
