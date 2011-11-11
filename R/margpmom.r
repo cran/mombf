@@ -27,6 +27,8 @@ pmomMarginalK <- function(sel, y, x, phi, tau, r=1, method='Laplace', B=10^5, lo
   if (is.vector(x)) x <- matrix(x,ncol=1)
   if (missing(XtX)) { XtX <- t(x) %*% x } else { XtX <- as.matrix(XtX) }
   if (missing(ytX)) { ytX <- as.vector(matrix(y,nrow=1) %*% x) } else { ytX <- as.vector(ytX) }
+  if (is.logical(sel)) sel <- which(sel)
+  if ((min(sel)<1) | max(sel)>ncol(x)) stop('Invalid specification of parameter sel')
   sel <- as.integer(sel-1); nsel <- as.integer(length(sel)); 
   p <- as.integer(ncol(x)); n <- as.integer(nrow(x))
   y <- as.double(y); sumy2 <- sum(y^2)
@@ -81,6 +83,8 @@ pmomMarginalU <- function(sel, y, x, alpha=0.001, lambda=0.001, tau=1, r=1, meth
   if (is.vector(x)) { x <- matrix(x,ncol=1) } else { x <- as.matrix(x) }
   if (missing(XtX)) { XtX <- t(x) %*% x } else { XtX <- as.matrix(XtX) }
   if (missing(ytX)) { ytX <- as.vector(matrix(y,nrow=1) %*% x) } else { ytX <- as.vector(ytX) }
+  if (is.logical(sel)) sel <- which(sel)
+  if ((min(sel)<1) | max(sel)>ncol(x)) stop('Invalid specification of parameter sel')
   sel <- as.integer(sel-1); nsel <- as.integer(length(sel)); 
   p <- as.integer(ncol(x)); n <- as.integer(nrow(x))
   y <- as.double(y); sumy2 <- sum(y^2)

@@ -51,20 +51,24 @@ verbose = TRUE)
   As these marginal densities are not available in closed form we
   implement Laplace-like approximations and exact evaluation via Importance
   Sampling. For the iMOM prior we also implement a Hybrid Laplace-IS
-  which is much faster computationally than Importance Sampling and
-  offers similar precision.
+  which uses a Laplace approximation to evaluate the integral wrt beta
+  and integrates wrt phi numerically.
 
   Regular Laplace approximations are used to compute marginals when the
-  residual variance is known. In the more typical case where the
+  residual variance phi is known. In the more typical case where the
   variance is unknown, direct Laplace approximations can be poor due to
   the posterior for phi being highly non-normal.
-  In this case, an asymptotic form of the Laplace approximation for
-  known phi is used which allows carrying out the integral wrt phi explicitely.
-
+  For MOM priors we integrate phi analytically and use a Laplace
+  approximation. For iMOM priors we re-parameterize to log(phi) and then
+  use a regular Laplace approximation.
+  
   It should be noted that Laplace approximations tend to under-estimate
   the marginal densities when the MLE for some parameter is very close
   to 0. That is, it tends to be conservative in the sense of excluding
   more variables from the model than the exact calculations.
+
+  For more details on the methods used to compute marginal densities see
+  Johnson & Rossell (2011).
 }
 \value{
 A list with elements
@@ -82,10 +86,17 @@ A list with elements
   simply taking \code{colMeans(postSample)}}.
 \item{postMode}{Model with highest posterior probability amongst all those visited}
 \item{postModeProb}{Unnormalized posterior prob of posterior mode (log scale)}
-\item{postProb}{Unnormalized posterior prob of each visited model (log scale)}
+\item{postProb}{Unnormalized posterior prob of each visited model (log
+  scale)}
+\item{coef}{Estimated coefficients (via posterior mode) for highest
+  posterior probability model}
 }
 \references{
-  Johnson V.E., Rossell D. Non-Local Prior Densities for Default Bayesian Hypothesis Tests. Journal of the Royal Statistical Society B, 2010, 72, 143-170.
+  Johnson V.E., Rossell D. Non-Local Prior Densities for Default
+  Bayesian Hypothesis Tests. Journal of the Royal Statistical Society B,
+  2010, 72, 143-170.
+  Johnson V.E., Rossell D. Bayesian model selection in high-dimensional
+  settings. Technical report. 2011
   See http://rosselldavid.googlepages.com for technical reports.
 }
 \author{ David Rossell }

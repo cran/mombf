@@ -1,4 +1,16 @@
-setClass("msPriorSpec", representation(priorType= "character", priorDistr= "character", priorPars = "vector"))
+###
+### AllClasses.R
+###
+
+require(methods)
+
+##=============================================================================
+setClass("msPriorSpec",
+         representation(priorType="character",
+                        priorDistr="character",
+                        priorPars="vector"),
+         prototype(priorPars=NA))
+
 
 setValidity("msPriorSpec", function(object){
   msg <- NULL
@@ -10,12 +22,8 @@ setValidity("msPriorSpec", function(object){
       if (!any(object@priorDistr %in% c('pMOM','piMOM','peMOM'))) {
         msg <- "priorDistr must be 'pMOM','piMOM' or 'peMOM'"
       } else {
-        if (object@priorDistr=='pMOM') {
-          if (!all(c('tau','r') %in% names(object@priorPars))) msg <- "priorPars must contain elements named 'tau', 'r'"
-        } else {
-          if (!('tau' %in% names(object@priorPars))) msg <- "priorPars must contain an element named 'tau'"
-        }
-      }
+        if (object@priorDistr=='pMOM') { if (!('r' %in% names(object@priorPars))) msg <- "priorPars must contain an element named 'r'" } 
+        if (!('tau' %in% names(object@priorPars)) & !all(c('a.tau','b.tau') %in% names(object@priorPars))) msg <- "priorPars must either specify 'tau' or 'a.tau' and 'b.tau'"        }
       
     } else if (object@priorType=='modelIndicator') {
 

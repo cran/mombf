@@ -27,15 +27,22 @@ If \code{priorType=="coefficients"}, \code{priorDistr} can be equal to "pMOM", "
 (product moment, product inverse moment or product exponential moment prior, respectively).
 If \code{priorType=="modelIndicator"}, \code{priorDistr} can be equal to "uniform" or "binomial"
 to specify a uniform prior (all models equaly likely a priori) or a binomial prior. For a binomial prior,
-the prior inclusion probability for any single variable must be specified in slot \code{priorPars}.
+the prior inclusion probability for any single variable must be
+specified in slot \code{priorPars['p']}. For a beta-binomial prior, the
+Beta hyper-prior parameters must be in \code{priorPars['alpha.p']} and \code{priorPars['beta.p']}.
 If \code{priorType=="nuisancePars"}, \code{priorDistr} must be equal to "invgamma". This corresponds to an
 inverse gamma distribution for the residual variance, with parameters
 specified in the slot \code{priorPars}.}
 
     \item{\code{priorPars}:}{Object of class \code{"vector"}, where each element must be named.
-For \code{priorDistr=='pMOM'}, there must be elements "tau" and "r". 
-For \code{priorDistr=='piMOM'} and \code{priorDistr=='pMOM'} there must be an element "tau".
-"tau" corresponds to the prior dispersion, and "r" to the MOM power parameter.
+For \code{priorDistr=='pMOM'}, there must be an element "r" (MOM power
+is 2r).
+For any \code{priorDistr} there must be either an element "tau" indicating
+the prior dispersion or elements "a.tau" and "b.tau" specifying an
+inverse gamma hyper-prior for "tau".
+Optionally, there may be an element "tau.adj" indicating the prior
+dispersion for the adjustment variables (i.e. not undergoing variable
+selection). If not defined, "tau.adj" is set to 0.001 by default.
 For \code{priorDistr=='binomial'}, there must be either an element "p" specifying the prior inclusion probability
 for any single covariate, or a vector with elements "alpha.p" and
 "beta.p" specifying a Beta(alpha.p,beta.p) hyper-prior on p.

@@ -20,7 +20,7 @@
 \usage{
 pimomMarginalK(sel, y, x, phi, tau=1, method='Laplace', B=10^5, logscale=TRUE, XtX, ytX) 
 pimomMarginalU(sel, y, x, alpha=0.001, lambda=0.001, tau=1,
-method='Hybrid', B=10^5, logscale=TRUE, XtX, ytX)
+method='Laplace', B=10^5, logscale=TRUE, XtX, ytX)
 pmomMarginalK(sel, y, x, phi, tau, r=1, method='Laplace', B=10^5,
 logscale=TRUE, XtX, ytX)
 pmomMarginalU(sel, y, x, alpha=0.001, lambda=0.001, tau=1,

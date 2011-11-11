@@ -1,6 +1,6 @@
 \documentclass[a4paper,12pt]{article}
-%\VignetteIndexEntry{Manual for the gaga library}
-%\VignettePackage{gaga}
+%\VignetteIndexEntry{Manual for the mombf library}
+%\VignettePackage{mombf}
 
 \usepackage{Sweave}
 \usepackage{amsmath}    % need for subequations
@@ -523,25 +523,50 @@ y <- x %*% theta + rnorm(100)
 
 First we need to specify the prior distribution for the regression coefficients,
 the model space and the residual variance.
+We specify a (product) iMOM prior on the coefficients with prior variance parameter \texttt{tau=.131},
+which targets the detection of standardized effect sizes above 0.2.
+Regarding the model space, we use a Beta-binomial prior (binomial prior on the number of included variables
+with a beta hyper-prior on the Binomial success probability)
+as then posterior probabilities automatically adjust for multiple comparisons \citep{scott:2010}.
+Finally, for the residual variance we set a fairly non-informative inverse gamma prior.
 
 <<varsel2>>=
-priorCoef <- new("msPriorSpec",priorType='coefficients',priorDistr='piMOM',priorPars=c(tau=1))
-priorDelta <- new("msPriorSpec",priorType='modelIndicator',priorDistr='uniform',priorPars=double(0))
+priorCoef <- new("msPriorSpec",priorType='coefficients',priorDistr='piMOM',priorPars=c(tau=.131))
+priorDelta <- new("msPriorSpec",priorType='modelIndicator',priorDistr='binomial',priorPars=c(alpha.p=1,beta.p=1))
 priorVar <- new("msPriorSpec",priorType='nuisancePars',priorDistr='invgamma',priorPars=c(alpha=.01,lambda=.01))
 @
 
-We will perform model selection assuming that the residual variance \texttt{phi} is known.
-The routine \texttt{modelSelection} implements a Gibbs sampling scheme.
-Additionally to the the posterior sample, which is saved in the slot \texttt{postSample},
-the routines also stores the model with highest posterior probability amongst all those considered
-during the Gibbs scheme and the marginal posterior probabilities of inclusion for each covariate.
+The routine \texttt{modelSelection} implements a Gibbs sampling scheme which
+returns a posterior sample for the variable inclusion indicators in the slot \texttt{postSample},
+the visited model with highest posterior probability 
+and the marginal posterior probabilities of inclusion for each covariate.
+The marginal posterior probabilities are estimated via Rao-Blackwellization,
+i.e. averaging the posterior probability for inclusion in each Gibbs iteration,
+as this estimate is more precise than simply taking \texttt{colMeans} on the slot \texttt{postSample}.
 
 <<varsel3>>=
 fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE, niter=10^2,
-priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar, phi=1,
+priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar, 
 method='Laplace')
 fit1$postMode
 fit1$margpp
+@
+
+We see that the posterior mode chooses the correct model,
+and that the marginal probabilities clearly indicate
+that covariates 1 and 2 should be included and covariate 3 should be excluded.
+This illustrates an important issue: 
+non-local priors result in a procedure which assigns high posterior probability
+to the true model (or the model under consideration
+with smallest Kullback-Leibler distance to the true model).
+This remains true even in high dimensions, whereas local priors
+typically assign negligible mass to any single model.
+We can see this by checking the proportion of posterior samples in which
+the correct model has been visited: 90 out of 90.
+
+<<varsel4>>=
+correct <- t(fit1$postSample)==c(TRUE,TRUE,FALSE)
+table(colSums(correct)==3)
 @
 
 
