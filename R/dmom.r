@@ -1,8 +1,13 @@
+###
+### dmom.R
+###
+
 #Wrapper to call dpmom (product mom) and dqmom (quadratic mom)
 dmom <- function(x, tau, a.tau, b.tau, phi=1, r=1, V1, baseDensity='normal', nu=3, logscale=FALSE, penalty='product') {
   if (penalty=='product') {
     ans <- dpmom(x, tau=tau, a.tau=a.tau, b.tau=b.tau, phi=phi, r=r, baseDensity=baseDensity, logscale=logscale)
   } else if (penalty=='quadratic') {
+    if (r>1) stop("r>1 not implemented for penalty=='quadratic'. Try penalty=='product' instead")
     ans <- dqmom(x, V1=V1, g=tau, n=1, baseDensity=baseDensity, nu=nu)
   } else {
     stop("Only 'penalty==product' and 'penalty==quadratic' are implemented")
@@ -11,7 +16,7 @@ dmom <- function(x, tau, a.tau, b.tau, phi=1, r=1, V1, baseDensity='normal', nu=
 }
 
 ##Product MOM density
-setGeneric("dpmom", function(x, tau, a.tau, b.tau, phi=1, r=1, baseDensity='normal', logscale=FALSE) standardGeneric("dpmom"))
+
 setMethod("dpmom", signature(x='vector'), function(x, tau, a.tau, b.tau, phi=1, r=1, baseDensity='normal', logscale=FALSE) {
   if (baseDensity!='normal') stop("Only baseDensity=='normal' is implemented for the product MOM")
   if (missing(tau) & (missing(a.tau) | missing(b.tau))) stop("Either tau or (a.tau,b.tau) must be specified")
@@ -75,3 +80,4 @@ if (is.vector(V1)) {
 }
 return(ans)
 }
+

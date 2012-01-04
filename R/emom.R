@@ -1,4 +1,7 @@
-setGeneric("demom",function(x, tau, a.tau, b.tau, phi=1, logscale=FALSE) standardGeneric("demom"))
+###
+### emom.R
+###
+
 
 setMethod("demom",signature(x='vector'),function(x, tau, a.tau, b.tau, phi=1, logscale=FALSE) {
   V1 <- 1
@@ -45,3 +48,4 @@ setMethod("demom",signature(x='matrix'),function(x, tau, a.tau, b.tau, phi=1, lo
 
 
 pemom <- function(q, tau, a.tau, b.tau) integrate(demom,-Inf,q,tau=tau,a.tau=a.tau,b.tau=b.tau)$value
+

@@ -1,3 +1,7 @@
+###
+### dimom.R
+###
+
 #Wrapper to call dpimom (product iMOM) and dqimom (quadratic imom)
 dimom <- function(x, tau=1, phi=1, V1, logscale=FALSE, penalty='product') {
   if (penalty=='product') {
@@ -11,7 +15,6 @@ dimom <- function(x, tau=1, phi=1, V1, logscale=FALSE, penalty='product') {
 }
 
 #Product iMOM
-setGeneric("dpimom", function(x, tau=1, phi=1, logscale=FALSE) standardGeneric("dpimom"))
 
 setMethod("dpimom", signature(x='vector'), function(x, tau=1, phi=1, logscale=FALSE) {
   ans <- .5*(log(tau)+log(phi)) - lgamma(.5) - log(x^2) - tau*phi/x^2
