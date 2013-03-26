@@ -5,190 +5,25 @@
 #ifndef DO_MOMBF_H
 #define DO_MOMBF_H      1
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <Rdefines.h>
-
 
 /*
  * Function Prototypes
  */
-extern SEXP pmomLM_I(
-  SEXP vnt_postModel,
-  SEXP vnt_margpp,
-  SEXP vnt_postCoef1,
-  SEXP vnt_postCoef2,
-  SEXP vnt_postPhi,
-  SEXP vnt_postOther,
-  SEXP vnt_niter,
-  SEXP vnt_thinning,
-  SEXP vnt_burnin,
-  SEXP vnt_niniModel,
-  SEXP vnt_iniModel,
-  SEXP vnt_iniCoef1,
-  SEXP vnt_iniCoef2,
-  SEXP vnt_iniPhi,
-  SEXP vnt_iniOthers,
-  SEXP vnt_verbose,        /* :TODO: Move to end */
-  SEXP vnt_n,
-  SEXP vnt_p1,
-  SEXP vnt_p2,
-  SEXP vnt_isbinary,
-  SEXP vnt_ybinary,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_x1,
-  SEXP vnt_x2,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_cholS2,
-  SEXP vnt_S2inv,
-  SEXP vnt_cholS2inv,
-  SEXP vnt_colsumx1sq,
-  SEXP vnt_alpha,
-  SEXP vnt_lambda,
-  SEXP vnt_priorCoef,
-  SEXP vnt_r,
-  SEXP vnt_tau1,
-  SEXP vnt_tau2,
-  SEXP vnt_priorTau1,
-  SEXP vnt_atau1,
-  SEXP vnt_btau1,
-  SEXP vnt_priorModel,
-  SEXP vnt_prModelpar);
+extern "C" {
 
-extern SEXP modelSelectionCI(
-  SEXP vnt_postSample,
-  SEXP vnt_postOther,
-  SEXP vnt_margpp,
-  SEXP vnt_postMode,
-  SEXP vnt_postModeProb,
-  SEXP vnt_postProb,
-  SEXP vnt_knownphi,
-  SEXP vnt_priorCoef,
-  SEXP vnt_niter,
-  SEXP vnt_thinning,
-  SEXP vnt_burnin,
-  SEXP vnt_ndeltaini,
-  SEXP vnt_deltaini,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_x,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_alpha,
-  SEXP vnt_lambda,
-  SEXP vnt_phi,
-  SEXP vnt_tau,
-  SEXP vnt_r,
-  SEXP vnt_priorDelta,
-  SEXP vnt_prDeltap,
-  SEXP vnt_parprDeltap,
-  SEXP vnt_verbose);
+  SEXP pmomLM_I(SEXP postModel, SEXP margpp, SEXP postCoef1, SEXP postCoef2, SEXP postPhi, SEXP postOther, SEXP niter, SEXP thinning, SEXP burnin, SEXP niniModel, SEXP iniModel, SEXP iniCoef1, SEXP iniCoef2, SEXP iniPhi, SEXP iniOthers, SEXP verbose, SEXP n, SEXP p1, SEXP p2, SEXP isbinary, SEXP ybinary, SEXP y, SEXP sumy2, SEXP x1, SEXP x2, SEXP XtX, SEXP ytX, SEXP cholS2, SEXP S2inv, SEXP cholS2inv, SEXP colsumx1sq, SEXP alpha, SEXP lambda, SEXP priorCoef, SEXP r, SEXP tau1, SEXP tau2, SEXP priorTau1, SEXP atau1, SEXP btau1, SEXP priorModel, SEXP prModelpar);
 
-extern SEXP greedyVarSelCI(
-  SEXP vnt_postMode,
-  SEXP vnt_othersMode,
-  SEXP vnt_postModeProb,
-  SEXP vnt_knownphi,
-  SEXP vnt_priorCoef,
-  SEXP vnt_niter,
-  SEXP vnt_ndeltaini,
-  SEXP vnt_deltaini,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_x,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_alpha,
-  SEXP vnt_lambda,
-  SEXP vnt_phi,
-  SEXP vnt_tau,
-  SEXP vnt_r,
-  SEXP vnt_priorDelta,
-  SEXP vnt_prDeltap,
-  SEXP vnt_parprDeltap,
-  SEXP vnt_verbose);
+  SEXP modelSelectionCI(SEXP SpostSample, SEXP SpostOther, SEXP Smargpp, SEXP SpostMode, SEXP SpostModeProb, SEXP SpostProb, SEXP Sknownphi, SEXP SpriorCoef, SEXP Sniter, SEXP Sthinning, SEXP Sburnin, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP Sverbose);
 
-extern SEXP pmomMarginalKI(
-  SEXP vnt_sel,
-  SEXP vnt_nsel,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_phi,
-  SEXP vnt_tau,
-  SEXP vnt_r,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_logscale);
+  SEXP greedyVarSelCI(SEXP SpostMode, SEXP SpostModeProb, SEXP Sknownphi, SEXP SpriorCoef, SEXP Sniter, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP Sverbose);
 
-extern SEXP pmomMarginalUI(
-  SEXP vnt_sel,
-  SEXP vnt_nsel,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_x,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_tau,
-  SEXP vnt_r,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_logscale,
-  SEXP vnt_alpha,
-  SEXP vnt_lambda);
+  SEXP pmomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale);
+  SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
 
-extern SEXP pimomMarginalKI(
-  SEXP vnt_sel,
-  SEXP vnt_nsel,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_phi,
-  SEXP vnt_tau,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_logscale);
+  SEXP pimomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale);
+  SEXP pimomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
 
-extern SEXP pimomMarginalUI(
-  SEXP vnt_sel,
-  SEXP vnt_nsel,
-  SEXP vnt_n,
-  SEXP vnt_p,
-  SEXP vnt_y,
-  SEXP vnt_sumy2,
-  SEXP vnt_x,
-  SEXP vnt_XtX,
-  SEXP vnt_ytX,
-  SEXP vnt_tau,
-  SEXP vnt_method,
-  SEXP vnt_B,
-  SEXP vnt_logscale,
-  SEXP vnt_alpha,
-  SEXP vnt_lambda);
-
-#ifdef __cplusplus
 }
-#endif
 
 #endif /* DO_MOMBF_H */
-

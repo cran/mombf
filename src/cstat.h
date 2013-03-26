@@ -121,6 +121,9 @@ void nrerror(const char *proc, const char *act, const char *what);
 /* Memory allocation                                          */
 /**************************************************************/
 
+
+
+char *charvector(int ,int);
 float   *vector(int, int);
 double  *dvector(int, int);
 double  **dmatrix(int, int, int, int);
@@ -133,6 +136,7 @@ int     **imatrix(int, int, int, int);
 //int ***iarray3(int p1, int p2, int p3);
 int ***iarray3(int n1, int n2, int n3);   //allocate 3-way int array [0..n1-1][0..n2-1][0..n3-1]
 
+void free_charvector(char *v,int nl,int nh);
 void free_vector(float *, int, int);
 void free_dvector(double *, int, int);
 void free_ivector(int *, int, int);
@@ -343,6 +347,7 @@ extern void inrgcm(void);                      /* code in com.c */
 double midpnt(double (* const func)(double), double a, double b, int n); //nth stage refinement of integral of func from a to b (evenly spaced in x)
 double midinf(double (* const func)(double), double aa, double bb, int n); //nth stage refinement of integral of func from aa to bb (evenly spaced in 1/x)
 double qromo(double (* const func)(double), double a, double b, double (* const choose)(double(* const)(double), double, double, int)); //Romberg integr on open interval (a,b)
+
 
 /**************************************************************/
 /* Interpolation, extrapolation and splines                   */
