@@ -9,9 +9,11 @@ modselIntegrals::modselIntegrals(pt2margFun marfun, pt2margFun priorfun, int nva
   this->marginalFunction= marfun;
   this->priorFunction= priorfun;
 
+  this->maxIntegral= -1.0e250;
+
   this->zerochar = (char *) calloc(nvars, sizeof(char));
   for (i=0; i<nvars; i++) this->zerochar[i]= '0';
-  //this->zerochar= charvector(0,maxVars-1);
+
 }
 
 modselIntegrals::~modselIntegrals() {
@@ -21,7 +23,7 @@ modselIntegrals::~modselIntegrals() {
 
 }
 
-//Return log(marginal likelihood) + log(prior). Uses logjointSaved if available, else adds result to logjointSaved
+//Return log(marginal likelihood) + log(prior). Uses logjointSaved if available, else adds result to logjointSaved. When maxVars>16, only models with a log-difference <=10 with the current mode are stores
 // Input: 
 //
 //   - sel: integer vector [0..maxVars-1], where 0's and 1's indicate covariates out/in the model (respectively)
@@ -40,7 +42,12 @@ double modselIntegrals::getJoint(int *sel, int *nsel, struct marginalPars *pars)
     ans= logjointSaved[s];
   } else {
     ans= marginalFunction(sel,nsel,pars) + priorFunction(sel,nsel,pars);
-    logjointSaved[s]= ans;
+    double d= maxIntegral - ans;
+    if (d<10 || maxVars<=16) logjointSaved[s]= ans;
+    if (d<0) {
+      maxIntegral= ans;
+      maxModel= s;
+    }
   }
 
   for (i=0; i<= *nsel; i++) this->zerochar[sel[i]]= '0';

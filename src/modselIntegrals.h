@@ -18,6 +18,10 @@ public:
 
   double getJoint(int *sel, int *nsel, struct marginalPars *pars); //Return logjoint(). Uses logjointSaved if available, else adds result to logjointSaved
 
+  double maxIntegral; //Stores value of largest integral
+
+  string maxModel; //Stores model with largest integral, e.g. "10001" 
+
 private:
 
   int maxVars; //Maximum number of covariates

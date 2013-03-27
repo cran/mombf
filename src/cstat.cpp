@@ -186,7 +186,7 @@ double vari(const int *x,
     //assert(unbiased == false || unbiased == true);
 
     for (i = 0; i <= lim; i++) {
-        value += pow(x[i], 2) / (1.0+lim);
+      value += pow((double) x[i], 2.0) / (1.0+lim);
     }
     value -= pow(meani(x, lim), 2);
     if (unbiased && lim>0) {
@@ -209,8 +209,8 @@ double wvari(const int *x,
     //assert(w != NULL);
 
     for (i = 0; i <= lim; i++) {
-        value += w[i] * pow(x[i], 2);
-        wtot += w[i];
+      value += w[i] * pow((double) x[i], 2.0);
+      wtot += w[i];
     }
     value = value/wtot - pow(wmeani(x, lim, w), 2);
     return value;
@@ -1854,7 +1854,7 @@ double ldoublefact(double x)
 
     /* :TBD: converts from double to integer without noting rounding intent */
     for (i = ((int) x); i >= 2; i -= 2) {
-        ans += log(i);
+      ans += log((double) i);
     }
     return(ans);
 }
@@ -2065,7 +2065,7 @@ double trigamma(double x)
                1 / ((x+2) * (x+2)) +
                1 / (x+3) +
                0.5 / ((x+3) * (x+3)) +
-               1 / (6.0 * pow(x+3, 3)));
+               1 / (6.0 * pow(x+3.0, 3.0)));
     } else {
         /* slower computation */
         return(polygamma(x, 1, 0.0001, 100, 5, 1));
@@ -4900,8 +4900,8 @@ double mnorm(double order,
         for (i = 0; i <= n/2; i++) {
             temp1 = i+1;
             temp2 = order-2*i+1;
-            res += pow(sd, 2*i) * pow(m, n-2*i) /
-                   (pow(2, i) * exp(gamln(&temp1)) * exp(gamln(&temp2)));
+            res += pow(sd, (double) (2*i)) * pow(m, (double) (n-2*i)) /
+	      (pow(2.0, (double) i) * exp(gamln(&temp1)) * exp(gamln(&temp2)));
         }
         temp1 = order+1;
         ans = exp(gamln(&temp1)) * res;
@@ -4923,7 +4923,7 @@ double dtC(double y,
     t2 = 0.5 * nu;
     t1 = t2 + 0.5;
     normk = exp(gamln(&t1) - gamln(&t2)) / (sqrt(nu*M_PI) * s);
-    return(normk * pow(1+(y-mu)*(y-mu) / (s*s*(nu+0.0)), -t1));
+    return(normk * pow(1.0+(y-mu)*(y-mu) / (s*s*(nu+0.0)), -t1));
 }
 
 
@@ -5011,7 +5011,7 @@ double dmvtC(const double *y,
     if (logscale == 1)
         return(normk -t1*log(1+res/(nu+0.0)));
     else
-        return(exp(normk) * pow(1+res/(nu+0.0), -t1));
+        return(exp(normk) * pow(1.0+res/(nu+0.0), -t1));
 }
 
 

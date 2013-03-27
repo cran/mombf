@@ -1,5 +1,4 @@
-030341bd0f75158f678f24f373b6c173 *DESCRIPTION
-7b9fd041522bac846027da1323c83550 *INDEX
+4af16f8713dcceb9c0031c8ea243be52 *DESCRIPTION
 5da147dced47f586555ad2f5abe3c57b *NAMESPACE
 7499fa4b9c3dfc2bb1ecf8310ddf40b8 *R/AllClasses.R
 5f3535083171a71c661dd9d0b8d148d4 *R/AllGenerics.R
@@ -40,10 +39,10 @@ bc55fe67a660fe97201f60e8e50a7272 *R/zellnerbf.R
 29fe1c237065c7ab79ce287eac71c63c *R/zellnerbf.knownsig.R
 a2e757c63bfb148bc47880bc7569ac38 *R/zellnerbf.lm.R
 d39546a23135b37595229e10a5aa79df *R/zellnerbf.unknownsig.R
-70d21b24d782b69cd3d62eed62f00e25 *changeLog
+d862320d7d09f6cd47e2e9b15c8ba81c *changeLog
 acc47fa9f192de1b269d1115b6dbe3bd *data/hald.rda
 96c1aaef43981bc916b38ed9fdb4350f *inst/doc/mombf.Rnw
-d94d1d34f44c87af845ed43199497a1a *inst/doc/mombf.pdf
+86caeab0c7b92db935f5c4c535643dff *inst/doc/mombf.pdf
 40ae37c3d670fdb7b139e18e056ff5ac *man/bbPrior.Rd
 8ecf659ede8cf8566474ea3a62300e08 *man/dmom.Rd
 160af2a742b048100f80bbb849631835 *man/hald.Rd
@@ -55,12 +54,12 @@ fab1ac7f423ebd7a9ac76fe6ed0d2ea6 *man/msPriorSpec-class.Rd
 9170836aec93e264f69b6ef342e99385 *man/nlpMarginals.Rd
 2791ef68a42359e3dd263e7ceccf3c3f *man/pmomLM.Rd
 ed214642f3a047c7b624fb2fb25a74d8 *src/Makevars
-cdecd50317a06f21267a31a6afd03155 *src/cstat.cpp
+8f13b608c2f335dbec9e5e1ab42ef9de *src/cstat.cpp
 0916fe447f35b72b4e5e752efd9ccb93 *src/cstat.h
 592448c1b8ed0b6fcd62f2ba3689efa0 *src/do_mombf.h
-78139566a9674a3ce2419629949bfd25 *src/modelSel.cpp
+ad70df6897343d3b3eba1bc8398b2cc6 *src/modelSel.cpp
 2f8f20e7671b602402f999978e6e063a *src/modelSel.h
-882be82bacb255eb57ea340cec2ab28c *src/modselIntegrals.cpp
-60cbd8ff74c62d9a541101f808950819 *src/modselIntegrals.h
+0e835526ea65b18b369e80766de4af75 *src/modselIntegrals.cpp
+d05a8d7d48375fa01e70d36a831985f8 *src/modselIntegrals.h
 96c1aaef43981bc916b38ed9fdb4350f *vignettes/mombf.Rnw
 12a4df21e3bd7493fad64cc5bb4cb452 *vignettes/references.bib
