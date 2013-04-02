@@ -1,3 +1,7 @@
+CHANGES IN VERSION 1.4.1
+- Fixed bug in modelSelection that caused to report the wrong model (only) at the first Gibbs iteration
+- Increased precision of Laplace approximation to compute MOM and iMOM integrated likelihood
+
 CHANGES IN VERSION 1.4.0
 - Fixed C++ bug in Solaris caused by overloading of 'log' and 'sqrt' functions
 

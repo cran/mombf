@@ -56,6 +56,13 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
     } else {
       method <- as.integer(2)
     }
+  } else if (method=='auto') {
+    if (priorCoef@priorDistr!='pMOM') { 
+      warning("method=='auto' is only available for 'pMOM' priors. Using method=='Laplace' instead")
+      method <- as.integer(-1)
+    } else {
+      method <- as.integer(2)
+    }
   }
 
   #Format arguments for .Call

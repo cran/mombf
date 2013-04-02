@@ -151,6 +151,7 @@ void free_iarray3(int ***a, int n1, int n2, int n3);
 
 double gamln(double*);  //log-Gamma function
 double gamln1(double*);  //auxiliary function called by gamln
+double lfact(int);  //log-factorial
 double ldoublefact(double x);  //log-double factorial(x)
 double digamma(double x);                          //from S Poetry (by Patrick J. Burns)
 double trigamma(double x);
@@ -287,6 +288,9 @@ void rtmvnormProd_up(double *ans, int n, int p, double *mu, double **Sinv, int k
 
 // Moments
 double mnorm(double order, double m, double sd); //raw moment of N(m,sd) of order "order"
+
+double mvtexpect(double* mu, double** sigma, int n, int power, double dof); //mean of prod (x_i)^(2*power) when x_i ~ T_dof(mu,sigma). Set dof=-1 for N(mu,sigma). Written by John Cook
+double mvtexpect_vec(double* mu, double* sigma, int n, int power, double dof); //same but input args are 0-indexed vectors
 
 // T Student
 double dtC(double y, double mu, double s, int nu); //density of t with nu df

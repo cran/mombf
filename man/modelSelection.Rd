@@ -31,7 +31,9 @@ verbose = TRUE)
 \item{deltaini}{Logical vector of length \code{ncol(x)} indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model}
 \item{initSearch}{Algorithm to refine \code{deltaini}. \code{initSearch=='greedy'} uses a greedy Gibbs sampling search. \code{initSearch=='SCAD'} sets \code{deltaini} to the non-zero elements in a SCAD fit with cross-validated regularization parameter. \code{initSearch=='none'} leaves \code{deltaini} unmodified}
 \item{method}{Method to compute marginal
-  densities. \code{method=='Laplace'} for Laplace approx,
+  densities. \code{method=='auto'} for exact calculation for up to 10
+  covariates and Laplace approx otherwise (only available for pMOM priors).
+  \code{method=='Laplace'} for Laplace approx,
   \code{method=='MC'} for Importance Sampling, \code{method=='Hybrid'}
   for Hybrid Laplace-IS (the latter method is only used for piMOM prior
   with unknown residual variance \code{phi}). See Details.}
