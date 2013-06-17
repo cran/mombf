@@ -28,6 +28,7 @@ struct marginalPars {
   double *prDeltap; //For Binomial prior on model space, prDeltap is the prob of success
   double *parprDeltap; //For Beta-Binomial prior on model space, parprDeltap[0],parprDeltap[1] are the prior parameters
   int *logscale;
+  double *offset;
 };
 
 struct modavgPars {

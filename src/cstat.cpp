@@ -5722,12 +5722,14 @@ double dgammaC(double x,
  */
 double dinvgammaC(double x,
                   double a,
-                  double b)
+                  double b,
+                  int logscale)
 {
     double ans = 0.0;
 
     if (x != 0.0) {
-        ans = exp(a * log(b) - gamln(&a) - (a + 1) * log(x) - b / x);
+        ans = a * log(b) - gamln(&a) - (a + 1) * log(x) - b / x;
+        if (logscale==0) ans= exp(ans);
     }
     return ans;
 }
@@ -5772,6 +5774,18 @@ double dmomNorm(double y,
 }
 
 
+//Univariate iMOM prior
+double dimom(double y, double m, double tau, double phi, int logscale) {
+  double y2, ans;
+  y2= (y-m)*(y-m);
+  ans= .5*(log(tau)+log(phi)) - .5*LOG_M_PI - log(y2) - tau*phi/y2;
+  if (logscale==0) ans= exp(ans);
+  return(ans);
+}
+
+
+
+
 //Sample from product MOM posterior under a linear model
 // Input:
 // - niter: number of Gibbs iterations
@@ -5784,9 +5798,10 @@ double dmomNorm(double y,
 // - r: MOM power parameter, i.e. penalty is th[i]^(2*r)
 // - tau: prior dispersion
 // - a_phi, b_phi: prior for residual variance phi ~ IG(a_phi/2, b_phi/2)
-void rmvmomPost(double *ans, int niter, int burnin, int thinning, double *y, double *x, int n, int p, int r, double tau, double a_phi, double b_phi) {
+// - prior: prior==0 for MOM, prior==1 for iMOM, prior==2 for eMOM
+void rnlpPost(double *ans, int niter, int burnin, int thinning, double *y, double *x, int n, int p, int r, double tau, double a_phi, double b_phi, int prior) {
   int i, j, k, isave, nsave;
-  double *m, *mortho, *alpha, **S, **Sinv, **cholSinv, **inv_cholSinv, **K, **D, tauinv= 1.0/tau, *Xty, *thcur, phicur, sqrtphi, tauphi, th2sum, apost, bpost, *linpred, ssr;
+  double *m, *mortho, *alpha, **S, **Sinv, **cholSinv, **inv_cholSinv, **K, **D, tauinv= 1.0/tau, *Xty, *thcur, phicur, phinew, sqrtphi, th2sum, th2invsum, apost, bpost, *linpred, ssr;
   //Pre-compute stuff
   nsave= (int) floor((niter - burnin +.0)/(thinning +.0));
   m= dvector(1,p); mortho= dvector(1,p); alpha= dvector(1,p); thcur= dvector(1,p); linpred= dvector(0,n-1);
@@ -5805,7 +5820,7 @@ void rmvmomPost(double *ans, int niter, int burnin, int thinning, double *y, dou
   Ax(inv_cholSinv, m, mortho, 1, p, 1, p); 
   free_dvector(Xty,1,p);
 
-  apost= .5*(a_phi + n + 3*p);
+  if (prior==0) apost= .5*(a_phi+n+3*p); else if (prior==1) apost= .5*(a_phi+n-p); else apost= .5*(a_phi+n+p);
   //Initialize
   th2sum= 0; phicur= sqrtphi= 1.0;
   for (j=1; j<=p; j++) { thcur[j]= m[j]; th2sum += thcur[j]*thcur[j]; }
@@ -5816,16 +5831,23 @@ void rmvmomPost(double *ans, int niter, int burnin, int thinning, double *y, dou
     Avecx(x, thcur+1, linpred, 0, n-1, 0, p-1);
     ssr=0;
     for (j=0; j<n; j++) ssr += pow(y[j]-linpred[j],2.0);
-    bpost= .5*(b_phi + th2sum/tau + ssr);
-    phicur= 1.0/rgammaC(apost, bpost);
-    sqrtphi= sqrt(phicur);
+    if (prior==0) {
+      bpost= .5*(b_phi + th2sum/tau + ssr);
+      phicur= 1.0/rgammaC(apost, bpost);
+      sqrtphi= sqrt(phicur);
+    } else {
+      if (prior==1) bpost= .5*(b_phi + ssr); else bpost= .5*(b_phi + th2sum/tau + ssr);
+      phinew= 1.0/rgammaC(apost, bpost);
+      th2invsum= 0;
+      for (j=1; j<=p; j++) th2invsum += 1/(thcur[j]*thcur[j]);
+      if (runif() < exp((phicur-phinew)*tau*th2invsum)) { phicur= phinew; sqrtphi= sqrt(phicur); }
+    }
     for (j=1; j<=p; j++) { 
       alpha[j]= mortho[j]/sqrtphi;
       //Dthcur[j]= Dthcur[j] * sqrtphi;
       for (k=1; k<=j; k++) { D[j][k]= cholSinv[j][k] * sqrtphi; K[j][k]= inv_cholSinv[j][k] / sqrtphi; }
     }
-    tauphi= phicur * tau;
-    rmvmom_Gibbs(thcur, p, alpha, D, K, &tauphi, r);
+    rnlp_Gibbs(thcur, p, alpha, D, K, &tau, &phicur, r, prior);
     if (i>burnin && ((i-burnin) % thinning)==0) {
       for (j=1; j<=p; j++) ans[isave + (j-1)*nsave]= thcur[j];
       ans[isave + p*nsave]= phicur;
@@ -5842,41 +5864,151 @@ void rmvmomPost(double *ans, int niter, int burnin, int thinning, double *y, dou
 }
 
 //R interface for rmvmomPost
-SEXP rmvmomPostCI(SEXP niter, SEXP burnin, SEXP thinning, SEXP y, SEXP x, SEXP p, SEXP r, SEXP tau, SEXP a_phi, SEXP b_phi) {
+
+SEXP rnlpPostCI(SEXP niter, SEXP burnin, SEXP thinning, SEXP y, SEXP x, SEXP p, SEXP r, SEXP tau, SEXP a_phi, SEXP b_phi, SEXP prior) {
   int n= LENGTH(y), nsave;
   SEXP ans;
   nsave= (int) (floor(INTEGER(niter)[0] - INTEGER(burnin)[0] +.0)/(INTEGER(thinning)[0] +.0));
   ans= PROTECT(allocVector(REALSXP, nsave * (INTEGER(p)[0]+1)));
-  rmvmomPost(REAL(ans), INTEGER(niter)[0], INTEGER(burnin)[0], INTEGER(thinning)[0], REAL(y), REAL(x), n, INTEGER(p)[0], INTEGER(r)[0], REAL(tau)[0], REAL(a_phi)[0], REAL(b_phi)[0]);
+  rnlpPost(REAL(ans), INTEGER(niter)[0], INTEGER(burnin)[0], INTEGER(thinning)[0], REAL(y), REAL(x), n, INTEGER(p)[0], INTEGER(r)[0], REAL(tau)[0], REAL(a_phi)[0], REAL(b_phi)[0], INTEGER(prior)[0]);
   UNPROTECT(1);
   return ans;
 }
 
-//Single Gibbs update (th,l) ~ N(th;m,S) * prod I(th[i]^2/ct)^r >l[i]
+//Single Gibbs update (th,l) ~ N(th;m,S) * prod g(th[i]) >l[i]
 //Input
 // - p: dimensionality of th (number of variables)
 // - m: m[1..p] is mean of Normal kernel
 // - cholS: cholS[1..p][1..p] is Cholesky decomp of covariance
 // - K: inverse of cholS
-// - ct: constant (typically obtained as current value of phi*tau)
-// - r: power parameter
+// - tau: value of tau (prior dispersion)
+// - phi: value of phi (residual variance)
+// - r: power parameter is 2*r
+// - prior: prior==0 for MOM, prior==1 for iMOM, prior==2 for eMOM
 //Input-Output
 // - th: at input th[1..p] is current value of th; at output the updated value
-void rmvmom_Gibbs(double *th, int p, double *m, double **cholS, double **K, double *ct, int r) {
+void rnlp_Gibbs(double *th, int p, double *m, double **cholS, double **K, double *tau, double *phi, int r, int prior) {
   int i;
-  double *lower, *upper, *l, *z;
+  double *lower, *upper, *l, *z, upperb;
   lower= dvector(1,p); upper= dvector(1,p); l= dvector(1,p); z= dvector(1,p);
   //Update l
-  for (i=1; i<=p; i++) {
-    l[i]= runif() * pow(th[i]*th[i] / (*ct), r + .0);
-    upper[i]= sqrt(l[i] * (*ct));
-    lower[i]= -upper[i];
+  if (prior==0) {
+    for (i=1; i<=p; i++) {
+      upperb= pen_mom(th+i, phi, tau, r);
+      l[i]= runif() * upperb;  //l[i]= runif() * pow(th[i]*th[i] / (phi*tau), r + .0);
+      if (r==1) { upper[i]= sqrt(l[i] * (*tau) * (*phi)); } else { upper[i]= pow(l[i] * (*tau) * (*phi), 1.0/(2.0*r)); }
+      lower[i]= -upper[i];
+    }
+  } else if (prior==1) {
+    for (i=1; i<=p; i++) {
+      upperb= pen_imom(th+i, phi, tau, 1);
+      l[i]= log(runif()) + upperb;
+      upper[i]= invpen_imom_sandwich(l+i, phi, tau);
+      lower[i]= -upper[i];
+    }
+  } else if (prior==2) {
+    for (i=1; i<=p; i++) {
+      upperb= pen_emom(th+i, phi, tau, 1);
+      l[i]= runif() * exp(upperb);  //l[i]= runif() * exp(sqrt(2) + tau*phi/th[i]^2)
+      upper[i]= sqrt(fabs((*tau) * (*phi)/(log(l[i])-sqrt(2.0))));
+      lower[i]= -upper[i];
+    }
   }
   //Update th, cholSth
   Ax(K, th, z, 1, p, 1, p); //z= K th;
   rtmvnormOutside_Gibbs(z, th, m, cholS, p, lower, upper);
   Ax(cholS, z, th, 1, p, 1, p); //th= D z
   free_dvector(lower,1,p); free_dvector(upper,1,p); free_dvector(l,1,p); free_dvector(z,1,p);
+}
+
+
+//Evaluates MOM prior penalty, i.e. (th^2 / (phi*tau))^r
+double pen_mom(double *th, double *phi, double *tau, int r) {
+  double ans;
+  ans= pow(th[0]*th[0] / ((*phi) * (*tau)), r + .0);
+  return ans;
+}
+
+//Evaluates eMOM prior penalty, i.e. exp(-sqrt(2)*tau*phi/th^2)
+double pen_emom(double *th, double *phi, double *tau, int logscale) {
+  double ans;
+  ans= sqrt(2.0) - (*tau) * (*phi) / (th[0]*th[0]);
+  if (logscale==0) ans= exp(ans);
+  return ans;  
+}
+
+//Evaluates iMOM prior penalty, i.e. dimom(th) / dnorm(th)
+double pen_imom(double *th, double *phi, double *tau, int logscale) {
+  double ans;
+  ans= dimom(*th, 0, *tau, *phi, 1) - dnormC(*th, 0, sqrt((*tau)*(*phi)), 1);
+  if (logscale==0) ans= exp(ans);
+  return(ans);
+}
+
+//Evaluates inverse of iMOM penalty, i.e. find th s.t. pen_imom(th,phi,tau) = lambda 
+//Refines initial search using Newton's algorithm
+double invpen_imom_newton(double *loglambda, double *phi, double *tau) {
+  int i, maxiter=50;
+  double b, d, zcur, thcur, fcur, fpcur, err, ftol=1.0e-5, tauphi= (*tau)*(*phi), halftauphi;
+  //Initial guess
+  halftauphi= .5*tauphi;
+  b= .5*(log((*tau)*(*tau)) + 2.0*log(*phi) + log(2.0)) - (*loglambda);
+  d= sqrt(b*b + 2.0);
+  zcur= (*tau)*(*phi)*(-b+d);
+  thcur= sqrt(zcur);
+  fcur= pen_imom(&thcur, phi, tau, 1);
+  //Newton search
+  err= *loglambda - fcur; i= 1;
+  while ((i<maxiter) && (fabs(err) > ftol)) {
+    fpcur= -1/zcur + tauphi/(zcur*zcur) + halftauphi;
+    zcur += err/fpcur;
+    thcur= sqrt(zcur);
+    fcur= pen_imom(&thcur, phi, tau, 1);
+    err= *loglambda - fcur;
+    i++;
+  }
+  return thcur;
+}
+
+
+// Uses an initial guess to bound the solution. Then uses a sandwhich approach based on recursive linear interpolation 
+double invpen_imom_sandwich(double *loglambda, double *phi, double *tau) {
+  int i, maxiter=50;
+  double b, d, zcur, thcur, fcur, zlow, thlow, flow, zup, thup, fup, err, ftol=1.0e-5;
+  //Initial guess
+  b= .5*(log((*tau)*(*tau)) + 2.0*log(*phi) + log(2.0)) - (*loglambda);
+  d= sqrt(b*b + 2.0);
+  zcur= (*tau)*(*phi)*(-b+d);
+  thcur= sqrt(zcur);
+  fcur= pen_imom(&thcur, phi, tau, 1);  //log-penalty at zcur
+  //Lower & upper bound
+  if (fcur >= (*loglambda)) {
+    zlow= .8*.8*zcur; thlow= sqrt(zlow); flow= pen_imom(&thlow, phi, tau, 1);
+    while (flow >= (*loglambda)) {
+      zcur= zlow; thcur= thlow; fcur= flow;
+      zlow= .8*.8*zcur; thlow= sqrt(zlow); flow= pen_imom(&thlow, phi, tau, 1);
+    }
+    zup= zcur; thup= thcur; fup= fcur;
+  } else {
+    zup= 1.2*1.2*zcur; thup= sqrt(zup); fup= pen_imom(&thup, phi, tau, 1);
+    while (fup <= (*loglambda)) {
+      zcur= zup; thcur= thup; fcur= fup;
+      zup= 1.2*1.2*zcur; thup= sqrt(zup); fup= pen_imom(&thup, phi, tau, 1);
+    }
+    zlow= zcur; thlow= thcur; flow= fcur;
+  }
+  //Search by sandwich linear interpolation
+  err= fcur - *loglambda; i= 1;
+  while ((i<maxiter) && (fabs(err) > ftol)) {
+    b= (fup-flow)/(zup-zlow);
+    zcur= zlow + ((*loglambda)-flow)/b; //approx is flow + b*(z-zlow)= loglambda
+    thcur= sqrt(zcur);
+    fcur= pen_imom(&thcur, phi, tau, 1);
+    err= fcur - *loglambda;
+    if (err > 0) { zup= zcur; fup= fcur; } else { zlow= zcur; flow= fcur; }
+    i++;
+  }
+  return thcur;
 }
 
 

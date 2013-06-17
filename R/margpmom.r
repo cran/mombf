@@ -7,7 +7,7 @@ fpmomNeg <- function(th, m, S, phi, tau, r) S %*% matrix(th-m, ncol=1)/phi - 2*r
 fppmomNeg <- function(th, m, S, phi, tau, r) S/phi + 2*r*diag(1/th^2,nrow=length(th))
 
 pmomIntegralApproxR <- function(m, S, phi, tau, r, logscale=TRUE) {
-  #Laplace approx to integral N(th; m, phi*solve(S)) prod(exp(-tau*phi/th^2)) wrt th
+  #Laplace approx to integral N(th; m, phi*solve(S)) prod (th/(phi*tau))^2r wrt th
   opt <- nlminb(m, objective=fmomNeg, gradient=fpmomNeg, m=m, S=S, phi=phi, tau=tau, r=r)$par
   fopt <- -fmomNeg(opt,m=m,S=S,phi=phi,tau=tau,r=r)
   hess <- fppmomNeg(opt,m=m,S=S,phi=phi,tau=tau,r=r)
