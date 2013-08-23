@@ -1,3 +1,9 @@
+CHANGES IN VERSION 1.5.4
+- Fixed R CMD CHECK warnings
+
+CHANGES IN VERSION 1.5.3
+- Fixed compiler warnings
+
 CHANGES IN VERSION 1.5.0
 - Added function rnlp to sample from MOM, eMOM and iMOM posteriors under Normal linear models
 - Added class msfit and several basic methods

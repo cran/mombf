@@ -321,7 +321,7 @@ void MHTheta1pmom(int *newdelta, double *newcoef, double *pinclude, int *resupda
       num+= dmomNorm(thetaprop,0,*(*pars).tau1,*curPhi,*(*pars).r,1);
       den= dtmixC(thetaprop,propPars,propPars+2,propPars+4,nu,2,1) + m1;
       lambda= exp(num-den);
-    } else if (curModel[j] && (deltaprop==0)) { // proposal is to drop variable from the model
+    } else {    //(curModel[j] && (deltaprop==0)), i.e. proposal is to drop variable from the model
       thetaprop=0;
       num= dtmixC(curCoef1[j],propPars,propPars+2,propPars+4,nu,2,1) + m1;
       for (i=0, den=0; i<n; i++) { den+= dnormC(res[i],0,sqrtPhi,1); }
@@ -903,7 +903,7 @@ double pmomMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
 
     num= -.5*(*(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel))/(*(*pars).phi);
     den= .5*((*(*pars).n +.0)*(LOG_M_2PI+logphi) + log(detS) + (*nsel)*logtau) + (*nsel)*(*(*pars).r)*(logtau+logphi+ldoublefact(2*(*(*pars).r)-1));
-    if ((*(*pars).method ==0) | ((*(*pars).method == -1) & (*nsel)>10))  { //Laplace
+    if ((*(*pars).method ==0) | ((*(*pars).method == -1) & ((*nsel)>10)))  { //Laplace
       thopt= dvector(1,*nsel); Voptinv= dmatrix(1,*nsel,1,*nsel);
       momIntegralApproxC(&ans,thopt,Voptinv,&fopt,(*pars).n,nsel,m,S,&detS,(*pars).phi,(*pars).tau,(*pars).r,(*pars).logscale);
       free_dvector(thopt,1,*nsel); free_dmatrix(Voptinv,1,*nsel,1,*nsel);
@@ -912,7 +912,7 @@ double pmomMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
       ans= MC_mom_normal(m,Sinv,(*pars).r,nsel,(*pars).B);
     } else if (*(*pars).method ==2) { //Plug-in
       ans= rsumlogsq(m,(*pars).r,nsel);
-    } else if ((*(*pars).method == -1) & (*nsel)<=10) { //Exact
+    } else if ((*(*pars).method == -1) & ((*nsel)<=10)) { //Exact
       Voptinv= dmatrix(1,*nsel,1,*nsel);
       for (i=1; i<= *nsel; i++) for (j=i; j<= *nsel; j++) Voptinv[i][j]= Voptinv[j][i]= Sinv[i][j] * (*(*pars).phi);
       ans= log(mvtexpect(m, Voptinv, *nsel, 2, -1));
@@ -960,7 +960,7 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
     ss= *(*pars).lambda + *(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel);
     num= gamln(&nuhalf) + alphahalf*log(lambdahalf) + nuhalf*(log(2.0) - log(ss));
     den= (*nsel)*ldoublefact(2*(*(*pars).r)-1.0) + .5*(*(*pars).n * LOG_M_2PI + log(detS)) + (*nsel)*(.5 + *(*pars).r)*log(*(*pars).tau) + gamln(&alphahalf);
-    if ((*(*pars).method ==0) | ((*(*pars).method == -1) & (*nsel)>10))  { //Laplace
+    if ((*(*pars).method ==0) | ((*(*pars).method == -1) & ((*nsel)>10)))  { //Laplace
       thopt= dvector(1,*nsel); Voptinv= dmatrix(1,*nsel,1,*nsel);
       phiadj= (nu+.0)/(nu-2.0);
       momIntegralApproxC(&ans,thopt,Voptinv,&fopt,(*pars).n,nsel,m,S,&detS,&phiadj,(*pars).tau,(*pars).r,(*pars).logscale);
@@ -971,7 +971,7 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
       ans= MC_mom_T(m,Sinv,&nu,(*pars).r,nsel,(*pars).B);
     } else if (*(*pars).method ==2) {  //Plug-in
       ans= rsumlogsq(m,(*pars).r,nsel);
-    } else if ((*(*pars).method == -1) & (*nsel)<=10) { //Exact
+    } else if ((*(*pars).method == -1) & ((*nsel)<=10)) { //Exact
       Voptinv= dmatrix(1,*nsel,1,*nsel);
       for (i=1; i<= *nsel; i++) for (j=i; j<= *nsel; j++) Voptinv[i][j]= Voptinv[j][i]= Sinv[i][j] * ss / (nu+.0);
       ans= log(mvtexpect(m, Voptinv, *nsel, 2, nu));

@@ -160,7 +160,7 @@ pimomMarginalUR <- function(y, x, alpha=0.001, lambda=0.001, tau=1, method='Lapl
 # - tau: prior dispersion parameter
 # - method: method to approximate the integral for known phi. Integral wrt phi is performed via integrate. 'Laplace' for Laplace approx which may underestimate true value, 'MC' for exact evaluation which can be very computationally expensive. 'Hybrid' uses numerical integration to integrate over phi and Laplace to integrate over theta (it corrects the Laplace error with an exact evaluation for a single value of phi close to the posterior mode)
 # - B: number of Monte Carlo samples to use (ignored if method=='Laplace')
-  require(actuar)
+  #require(actuar)
   if (is.matrix(y)) y <- as.vector(y)
   if (is.vector(x)) x <- matrix(x,ncol=1)
   if (missing(XtX)) { XtX <- t(x) %*% x }
