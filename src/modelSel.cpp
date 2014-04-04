@@ -6,6 +6,8 @@
 #include "modelSel.h"
 #include "do_mombf.h"
 #include "modselIntegrals.h"
+#include <vector>
+#include "Polynomial.h"
 
 //Global variables defined for minimization/integration routines
 struct marginalPars f2opt_pars, f2int_pars;
@@ -155,7 +157,7 @@ SEXP pmomLM_I(SEXP postModel, SEXP margpp, SEXP postCoef1, SEXP postCoef2, SEXP 
 
 void pmomLM(int *postModel, double *margpp, double *postCoef1, double *postCoef2, double *postPhi, double *postOther, struct modavgPars *pars, int *niter, int *thinning, int *burnin, int *niniModel, int *iniModel, double *iniCoef1, double *iniCoef2, double *iniPhi, double *iniOthers, int *verbose) {
   int i, j, k, ilow, iupper, savecnt, niterthin, niter10, nsel= *niniModel, *curModel, newdelta, n=*(*pars).n, p1=*(*pars).p1, p2=*(*pars).p2, psn, resupdate, isbinary=*(*pars).isbinary;
-  double *res, *partialres, sumres2, sumpartialres2, newcoef, *curCoef1, *curCoef2, curPhi, *linpred1, *linpred2, pinclude, *temp;
+  double *res, *partialres, sumres2, sumpartialres2, newcoef, *curCoef1, *curCoef2, curPhi=1.0, *linpred1, *linpred2, pinclude, *temp;
   if (*verbose) Rprintf("Running MCMC");
   niterthin= (int) floor((*niter - *burnin +.0)/(*thinning +.0));
   if (*niter >10) { niter10= *niter/10; } else { niter10= 1; }
@@ -269,7 +271,7 @@ void sample_latentProbit(double *y, double *res, double *sumres2, int *ybinary, 
 // - res: on input, vector with residuals given the current coefficient value. On output, residuals given the updated coefficient value.
 void MHTheta1pmom(int *newdelta, double *newcoef, double *pinclude, int *resupdate, double *res, double *partialres, double *sumres2, double *sumpartialres2, int j, int *nsel, int *curModel, double *curCoef1, double *curPhi, struct modavgPars *pars) {
   int n= *(*pars).n, logscale=1, nsel0, nsel1, deltaprop, nu, i;
-  double m1, *xj, m0, logbf, logpratio, thetaprop, m, S, propPars[5], lhood, lprior, lprop, lambda=0.0, num, den, sqrtPhi=sqrt(*curPhi);
+  double m1, *xj, m0, logbf, logpratio, thetaprop, m, S, propPars[6], lhood, lprior, lprop, lambda=0.0, num, den, sqrtPhi=sqrt(*curPhi);
   pt2modavgPrior priorFunction= NULL;
   *resupdate= 0;
   xj= (*pars).x1+j*n; //pointer to variable j in x1
@@ -549,7 +551,7 @@ SEXP modelSelectionCI(SEXP SpostSample, SEXP SpostOther, SEXP Smargpp, SEXP Spos
 
 void modelSelectionGibbs(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars) {
   int i, j, k, *sel, *selnew, *selaux, nsel, nselnew, niter10, niterthin, savecnt, ilow, iupper;
-  double currentJ, newM, newP, newJ, ppnew, u;
+  double currentJ, newM, newP, newJ=0.0, ppnew, u;
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
 
   marginalFunction= set_marginalFunction(prCoef, knownphi);
@@ -573,16 +575,20 @@ void modelSelectionGibbs(int *postSample, double *postOther, double *margpp, int
   for (i=ilow; i< iupper; i++) {
     for (j=0; j< *(*pars).p; j++) {
       sel2selnew(j,sel,&nsel,selnew,&nselnew); //copy sel into selnew, adding/removing jth element
-      newM= marginalFunction(selnew,&nselnew,pars);
-      newP= priorFunction(selnew,&nselnew,pars);
-      newJ= newM + newP;
-      if (newJ > *postModeProb) {   //update posterior mode
-        *postModeProb= newJ;
-        for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
-        for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; } 
+      if (nselnew <= (*(*pars).p)) {
+        newM= marginalFunction(selnew,&nselnew,pars);
+        newP= priorFunction(selnew,&nselnew,pars);
+        newJ= newM + newP;
+        if (newJ > *postModeProb) {   //update posterior mode
+          *postModeProb= newJ;
+          for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
+          for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; } 
+        }
+        ppnew= 1.0/(1.0+exp(currentJ-newJ));
+        if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
+      } else {
+ 	ppnew= -0.01;
       }
-      ppnew= 1.0/(1.0+exp(currentJ-newJ));
-      if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
       u= runif();
       if (u<ppnew) {  //update model indicator
         selaux= sel; sel=selnew; selnew=selaux; nsel=nselnew; currentJ= newJ;
@@ -608,7 +614,7 @@ void modelSelectionGibbs(int *postSample, double *postOther, double *margpp, int
 //Same as modelSelectionGibbs, but log(integrated likelihood) + log(prior) are managed through an object of class modselIntegrals
 void modelSelectionGibbs2(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars) {
   int i, j, k, *sel, *selnew, *selaux, nsel, nselnew, niter10, niterthin, savecnt, ilow, iupper;
-  double currentJ, newJ, ppnew, u;
+  double currentJ, newJ=0.0, ppnew, u;
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
 
   marginalFunction= set_marginalFunction(prCoef, knownphi);
@@ -634,14 +640,18 @@ void modelSelectionGibbs2(int *postSample, double *postOther, double *margpp, in
   for (i=ilow; i< iupper; i++) {
     for (j=0; j< *(*pars).p; j++) {
       sel2selnew(j,sel,&nsel,selnew,&nselnew); //copy sel into selnew, adding/removing jth element
-      newJ= integrals->getJoint(selnew,&nselnew,pars);
-      if (newJ > *postModeProb) {   //update posterior mode
-        *postModeProb= newJ;
-        for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
-        for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; } 
+      if (nselnew <= (*(*pars).p)) {
+        newJ= integrals->getJoint(selnew,&nselnew,pars);
+        if (newJ > *postModeProb) {   //update posterior mode
+          *postModeProb= newJ;
+          for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
+          for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; } 
+        }
+        ppnew= 1.0/(1.0+exp(currentJ-newJ));
+        if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
+      } else {
+	ppnew= -0.01;
       }
-      ppnew= 1.0/(1.0+exp(currentJ-newJ));
-      if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
       u= runif();
       if (u<ppnew) {  //update model indicator
         selaux= sel; sel=selnew; selnew=selaux; nsel=nselnew; currentJ= newJ;
@@ -1058,9 +1068,57 @@ void fppimomNegC_non0(double **ans, double *th, double *XtX, double *ytX, double
 }
 
 
+void imomModeK(double *th, PolynomialRootFinder::RootStatus_T *status, double *XtX, double *ytX, double *phi, double *tau, int *sel, int *nsel, int *p) {
+  //piMOM mode when phi is known using gradient algorithm
+  // - th: contains initial estimate at input and mode at output
+  // - status: indicates if root finding has been successful
+  bool found=false;
+  int i, j, niter=0, root_count;
+  double err= 1.0, *coef, *real_vector, *imag_vector;
+  Polynomial poly;
+
+  coef= dvector(0,4);
+  real_vector= dvector(0,4);
+  imag_vector= dvector(0,4);
+
+  coef[0]= 2.0 * (*tau) * (*phi);
+  coef[1]= 0.0;
+  coef[2]= -2;
+  while ((err > 1.0e-5) & (niter<50)) {
+    err= 0; 
+    for (i=1; i<=(*nsel); i++) {
+      coef[3]= ytX[sel[i-1]];
+      for (j=1; j<i; j++) { coef[3]-= XtX[sel[i-1]*(*p)+sel[j-1]] * th[j]; }
+      for (j=i+1; j<=(*nsel); j++) { coef[3]-= XtX[sel[i-1]*(*p)+sel[j-1]] * th[j]; }
+      coef[3]= coef[3]/(*phi);
+      coef[4]= -XtX[sel[i-1]*(*p)+sel[i-1]]/(*phi);
+      poly.SetCoefficients(coef, 4);
+      (*status)= poly.FindRoots(real_vector,imag_vector,&root_count);
+
+      j=0; found= false;
+      while ((!found) & (j<=4)) {
+	if (fabs(imag_vector[j])<1.0e-5) {
+	  if (((real_vector[j]>0) & (th[i]>0)) | ((real_vector[j]<0) & (th[i]<0))) {
+	    err= max_xy(err,fabs(th[i] - real_vector[j]));
+	    th[i]= real_vector[j];
+	    found= true;
+	  }
+	}
+	j++;
+      }
+
+    }
+    niter++;
+  }
+
+  free_dvector(coef,0,4); free_dvector(real_vector,0,4); free_dvector(imag_vector,0,4);
+}
+
+
 void imomIntegralApproxC(double *ILaplace, double *thopt, double **Voptinv, double *fopt, int *sel, int *nsel, int *n, int *p, double *XtX, double *ytX, double *phi, double *tau, int *logscale) {
   int iter, maxit=100, emptyint;
   double **V, **Vinv, ftol= 1.0e-5, **dirth, **Vopt, detVopt, emptydouble=0, **emptymatrix;
+  PolynomialRootFinder::RootStatus_T status;
 
   V= dmatrix(1,*nsel,1,*nsel); Vinv= dmatrix(1,*nsel,1,*nsel); Vopt= dmatrix(1,*nsel,1,*nsel); dirth= dmatrix(1,*nsel,1,*nsel);
   emptymatrix= dmatrix(1,1,1,1);
@@ -1068,10 +1126,15 @@ void imomIntegralApproxC(double *ILaplace, double *thopt, double **Voptinv, doub
   addct2XtX(tau,XtX,sel,nsel,p,V); //add tau to XtX diagonal, store in V
   inv_posdef_upper(V,*nsel,Vinv);
   Asym_xsel(Vinv,*nsel,ytX,sel,thopt);  //product Vinv * selected elements in ytX
-  ddiag(dirth,1,*nsel);
-  set_f2opt_pars(&emptydouble,emptymatrix,&emptydouble,XtX,ytX,&emptydouble,&emptydouble,phi,tau,&emptyint,n,p,sel,nsel);
   //Minimization
-  minimize(thopt, dirth, *nsel, ftol, &iter, fopt, f2opt_imom, maxit);
+  imomModeK(thopt,&status,XtX,ytX,phi,tau,sel,nsel,p);
+  set_f2opt_pars(&emptydouble,emptymatrix,&emptydouble,XtX,ytX,&emptydouble,&emptydouble,phi,tau,&emptyint,n,p,sel,nsel);
+  if (status == PolynomialRootFinder::SUCCESS) {
+    (*fopt)= f2opt_imom(thopt);
+  } else {
+    ddiag(dirth,1,*nsel);
+    minimize(thopt, dirth, *nsel, ftol, &iter, fopt, f2opt_imom, maxit);
+  }
 
   //Laplace approx
   fppimomNegC_non0(Vopt,thopt,XtX,ytX,phi,tau,n,p,sel,nsel);
@@ -1238,20 +1301,96 @@ void fppimomUNegC_non0(double **ans, double *th, double *sumy2, double *XtX, dou
   free_dvector(XtXth,1,*nsel);
 }
 
+void imomModeU(double *th, PolynomialRootFinder::RootStatus_T *status, double *sumy2, double *XtX, double *ytX, double *tau, double *alpha, double *lambda, int *sel, int *nsel, int *n, int *p) {
+  //piMOM mode when phi is unknown using gradient algorithm
+  // - th: contains initial estimate (theta,log(phi)) at input and mode at output
+  // - status: indicates if root finding has been successful
+  bool found=false;
+  int i, j, niter=0, root_count;
+  double err= 1.0, *coef, *real_vector, *imag_vector, phi, phinew, a, b, b2, c, d, suminvth2, *XtXth;
+  Polynomial poly;
+
+  phi= exp(th[*nsel +1]);
+  b= (*n -(*nsel) + *alpha)/2.0;
+  b2= b*b;
+
+  coef= dvector(0,4);
+  real_vector= dvector(0,4);
+  imag_vector= dvector(0,4);
+  XtXth= dvector(1,*nsel);
+
+  coef[1]= 0.0;
+  coef[2]= -2;
+  while ((err > 1.0e-5) & (niter<50)) {
+    coef[0]= 2.0 * (*tau) * phi;
+    suminvth2= 0.0;
+    err= 0; 
+    //Update th
+    for (i=1; i<=(*nsel); i++) {
+      coef[3]= ytX[sel[i-1]];
+      for (j=1; j<i; j++) { coef[3]-= XtX[sel[i-1]*(*p)+sel[j-1]] * th[j]; }
+      for (j=i+1; j<=(*nsel); j++) { coef[3]-= XtX[sel[i-1]*(*p)+sel[j-1]] * th[j]; }
+      coef[3]= coef[3]/phi;
+      coef[4]= -XtX[sel[i-1]*(*p)+sel[i-1]]/phi;
+      poly.SetCoefficients(coef, 4);
+      (*status)= poly.FindRoots(real_vector,imag_vector,&root_count);
+
+      j=0; found= false;
+      while ((!found) & (j<=4)) {
+	if (fabs(imag_vector[j])<1.0e-5) {
+	  if (((real_vector[j]>0) & (th[i]>0)) | ((real_vector[j]<0) & (th[i]<0))) {
+	    err= max_xy(err, fabs(th[i] - real_vector[j]));
+	    th[i]= real_vector[j];
+	    suminvth2 += 1.0/(th[i]*th[i]);
+	    found= true;
+	  }
+	}
+	j++;
+      }
+    }
+
+    //Update phi
+    a= (*tau) * suminvth2;
+    c= 0;
+    Asel_x(XtX,*p,th,*nsel,sel-1,XtXth);
+    for (i=1; i<=(*nsel); i++) { c += -2.0*ytX[sel[i-1]]*th[i] + th[i]*XtXth[i]; }
+    c= -.5*(*lambda + *sumy2 + c);
+    d= sqrt(b2 - 4.0*a*c);
+
+    if (-b > d) { phinew= (-b-d)/(2.0*a); } else { phinew= (-b+d)/(2.0*a); }
+    err= max_xy(err,fabs(phi-phinew));
+    phi= phinew;
+
+    niter++;
+  }
+
+  th[*nsel +1]= log(phi);
+
+  free_dvector(coef,0,4); free_dvector(real_vector,0,4); free_dvector(imag_vector,0,4);
+  free_dvector(XtXth,1,*nsel);
+}
+
 
 void imomUIntegralApproxC(double *ILaplace, double *thopt, int *sel, int *nsel, int *n, int *p, double *sumy2, double *XtX, double *ytX, double *alpha, double *lambda, double *tau, int *logscale) {
   int iter, maxit=100, emptyint;
   double ftol= 1.0e-10, **dirth, **Vopt, **Voptinv, detVopt, emptydouble=0, **emptymatrix, fopt;
+  PolynomialRootFinder::RootStatus_T status;
 
   Vopt= dmatrix(1,*nsel +1,1,*nsel +1); Voptinv= dmatrix(1,*nsel +1,1,*nsel +1);
   dirth= dmatrix(1,*nsel +1,1,*nsel +1);
   emptymatrix= dmatrix(1,1,1,1);
   //Initialize
-  ddiag(dirth,1,*nsel +1);
   set_f2opt_pars(&emptydouble,emptymatrix,sumy2,XtX,ytX,alpha,lambda,&emptydouble,tau,&emptyint,n,p,sel,nsel);
 
   //Minimization
-  minimize(thopt, dirth, *nsel +1, ftol, &iter, &fopt, f2opt_imomU, maxit);
+  imomModeU(thopt,&status,sumy2,XtX,ytX,tau,alpha,lambda,sel,nsel,n,p);
+  set_f2opt_pars(&emptydouble,emptymatrix,sumy2,XtX,ytX,alpha,lambda,&emptydouble,tau,&emptyint,n,p,sel,nsel);
+  if (status == PolynomialRootFinder::SUCCESS) {
+    fopt= f2opt_imomU(thopt);
+  } else {
+    ddiag(dirth,1,*nsel +1);
+    minimize(thopt, dirth, *nsel +1, ftol, &iter, &fopt, f2opt_imomU, maxit);
+  }
 
   //Laplace approx
   fppimomUNegC_non0(Vopt,thopt,sumy2,XtX,ytX,alpha,lambda,tau,n,p,sel,nsel);
@@ -1309,7 +1448,7 @@ SEXP pimomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssum
 
 double pimomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   int i, j, zero=0, one=1, *inputlog;
-  double ans, er, sumer2, **V, **Vinv, *thest, ypred, phiest, intmc, intlapl, *inputphi, num, den, term1, alphahalf=.5*(*(*pars).alpha);
+  double ans=0, er, sumer2, **V, **Vinv, *thest, ypred, phiest, intmc, intlapl, *inputphi, num, den, term1, alphahalf=.5*(*(*pars).alpha);
 
   if (*nsel ==0) {
     term1= .5*(*(*pars).n + *(*pars).alpha);

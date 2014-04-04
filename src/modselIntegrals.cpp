@@ -11,7 +11,7 @@ modselIntegrals::modselIntegrals(pt2margFun marfun, pt2margFun priorfun, int nva
 
   this->maxIntegral= -1.0e250;
 
-  this->zerochar = (char *) calloc(nvars, sizeof(char));
+  this->zerochar = (char *) calloc(nvars+1, sizeof(char));
   for (i=0; i<nvars; i++) this->zerochar[i]= '0';
 
 }
@@ -23,7 +23,7 @@ modselIntegrals::~modselIntegrals() {
 
 }
 
-//Return log(marginal likelihood) + log(prior). Uses logjointSaved if available, else adds result to logjointSaved. When maxVars>16, only models with a log-difference <=10 with the current mode are stores
+//Return log(marginal likelihood) + log(prior). Uses logjointSaved if available, else adds result to logjointSaved. When maxVars>16, only models with a log-difference <=10 with the current mode are stored
 // Input: 
 //
 //   - sel: integer vector [0..maxVars-1], where 0's and 1's indicate covariates out/in the model (respectively)
