@@ -3,6 +3,7 @@
 ###
 
 import(methods, mvtnorm, ncvreg, actuar, mgcv)
+importFrom(survival, Surv, coxph)
 
 useDynLib(mombf)
 
@@ -14,6 +15,7 @@ export(dmom)
 export(emomLM)
 export(emomPM)
 export(emomprior)
+export(eprod)
 export(g2mode)
 export(igprior)
 export(imombf)

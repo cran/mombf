@@ -2,6 +2,12 @@
 ### margpmom.R
 ###
 
+eprod <- function(m, S, power=1, dof= -1) {
+  #Mean of prod (x_i)^(2*power) when x_i ~ T_dof(mu,sigma). Set dof=-1 for N(mu,sigma). Written by John Cook
+  ans <- .Call("eprod_I",as.double(m),as.double(S), as.integer(length(m)), as.integer(power), as.double(dof))
+  ans
+}
+
 fmomNeg <- function(th, m, S, phi, tau, r, logscale=TRUE) .5*mahalanobis(th, center=m, cov=S, inverted=TRUE)/phi - r*sum(log(th^2))
 fpmomNeg <- function(th, m, S, phi, tau, r) S %*% matrix(th-m, ncol=1)/phi - 2*r/th
 fppmomNeg <- function(th, m, S, phi, tau, r) S/phi + 2*r*diag(1/th^2,nrow=length(th))
@@ -108,30 +114,37 @@ pmomMarginalUR <- function(y, x, r, alpha=0.001, lambda=0.001, tau, method='Lapl
   #   i.e. phi is the residual variance; tau the prior dispersion parameter
   #require(mvtnorm)
   n <- length(y); p <- ncol(x)
-  S <- t(x) %*% x + diag(p)/tau
-  m <- solve(S) %*% t(x) %*% matrix(y,ncol=1)
-  nu <- 2*r*p + n + alpha
-  ss <- as.numeric(lambda + sum(y^2) - t(m) %*% S %*% m)
-  V <- S*nu/ss
-  #
-  if (method=='Laplace') {
-    I <- pmomIntegralApproxR(m=m, S=S, phi=nu/(nu-2), tau=tau, r=r, logscale=TRUE)
-  } else if (method=='1storder') {
-    I <- r*sum(log(m^2))
-  } else if (method=='MC') {
-    cholV <- t(chol(solve(V)))
-    z <- rmvnorm(B,rep(0,p),diag(p))
-    thsim <- as.vector(m) + (cholV %*% t(z)) * sqrt(nu/rchisq(B,df=nu))
-    eprod <- exp(colSums(log(thsim^(2*r))))
-    seprod <- sd(eprod)/sqrt(length(eprod))
-    I <- log(mean(eprod))
+  if (ncol(x)==0) {
+    term1 <- .5*(n + alpha)
+    num <- .5*alpha*log(lambda) + lgamma(term1)
+    den <- .5*n*log(pi) + lgamma(alpha/2)
+    ans <- num -den - term1*log(lambda + sum(y^2))
   } else {
-    stop("Only 'Laplace', '1storder' and 'MC' methods are implemented")
+    S <- t(x) %*% x + diag(p)/tau
+    m <- solve(S) %*% t(x) %*% matrix(y,ncol=1)
+    nu <- 2*r*p + n + alpha
+    ss <- as.numeric(lambda + sum(y^2) - t(m) %*% S %*% m)
+    V <- S*nu/ss
+    #
+    if (method=='Laplace') {
+      I <- pmomIntegralApproxR(m=m, S=S, phi=nu/(nu-2), tau=tau, r=r, logscale=TRUE)
+    } else if (method=='1storder') {
+      I <- r*sum(log(m^2))
+    } else if (method=='MC') {
+      cholV <- t(chol(solve(V)))
+      z <- rmvnorm(B,rep(0,p),diag(p))
+      thsim <- as.vector(m) + (cholV %*% t(z)) * sqrt(nu/rchisq(B,df=nu))
+      eprod <- exp(colSums(log(thsim^(2*r))))
+      seprod <- sd(eprod)/sqrt(length(eprod))
+      I <- log(mean(eprod))
+    } else {
+      stop("Only 'Laplace', '1storder' and 'MC' methods are implemented")
+    }
+    #
+    num <- lgamma(nu/2) + .5*alpha*log(lambda/2) + .5*nu*log(2) - .5*nu*log(ss)
+    den <- p*(sum(log(seq(1,2*r-1,by=2)))) + .5*n*log(2*pi) + .5*log(det(S)) + (.5*p+r*p)*log(tau) + lgamma(alpha/2)
+    ans <- I + num - den
   }
-  #
-  num <- lgamma(nu/2) + .5*alpha*log(lambda/2) + .5*nu*log(2) - .5*nu*log(ss)
-  den <- p*(sum(log(seq(1,2*r-1,by=2)))) + .5*n*log(2*pi) + .5*log(det(S)) + (.5*p+r*p)*log(tau) + lgamma(alpha/2)
-  ans <- I + num - den
   if (!logscale) ans <- exp(ans)
   return(ans)
 }

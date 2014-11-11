@@ -69,6 +69,16 @@ if (initSearch=='none') {
   cvscad <- cv.ncvreg(X=x,y=y,family="gaussian",penalty="SCAD",nfolds=10,dfmax=1000,max.iter=10^4)
   postTheta1[1,] <- ncvreg(X=x,y=y,penalty="SCAD",dfmax=1000,lambda=rep(cvscad$lambda[cvscad$cv],2))$beta[-1, 1]
   postDelta[1,] <- postTheta1[1,]!=0
+} else if (initSearch=='greedy') {
+  marginalFunction <- function(y, x, logscale=TRUE) { pemomMarginalUR(y, x=x, tau=tau, logscale=logscale) }
+  postDelta[1,] <- greedymodelSelectionR(y=y,x=x,niter=10,marginalFunction=marginalFunction, priorFunction=modelPrior, verbose=FALSE)
+  if (any(postDelta[1,])) {
+    postTheta1[1,] <- as.vector(coef(lm(y ~ -1 + x[,postDelta[1,]])))
+  } else {
+    postTheta1[1,] <- rep(0,p1)
+  }
+} else {
+  stop("Value specified for initSearch is not implemented")
 }
 postTheta2[1,] <- S2inv %*% t(xadj) %*% y
 linpred1 <- x %*% t(postTheta1[1,,drop=FALSE])
@@ -357,11 +367,15 @@ simPhiemom <- function(phiCurrent, alpha.phi, lambda.phi, n, delta, p2, theta1, 
  # - other params which define the posterior
   a <- alpha.phi + n + sum(delta) + p2
   l <- lambda.phi + sum(theta1^2)/tau + sum(theta2^2)/tau.adj + ssr
-  t <- -tau*sum(1/theta1^2)
-  approxpar <- postPhiemomApprox(a=a,l=l,t=t)
-  phiProp <- 1/rgamma(1,shape=approxpar['shape'],rate=approxpar['scale'])
-  accprob <- exp(postPhiemom(phiProp,a=a,l=l,t=t,logscale=TRUE) - postPhiemom(phiCurrent,a=a,l=l,t=t,logscale=TRUE) + dinvgamma(phiCurrent,shape=approxpar['shape'],scale=approxpar['scale'],log=TRUE) - dinvgamma(phiProp,shape=approxpar['shape'],scale=approxpar['scale'],log=TRUE))
-  if (runif(1)< accprob) phiCurrent <- phiProp
+  if (length(theta1)>0) {
+    t <- -tau*sum(1/theta1^2)
+    approxpar <- postPhiemomApprox(a=a,l=l,t=t)
+    phiProp <- 1/rgamma(1,shape=approxpar['shape'],rate=approxpar['scale'])
+    accprob <- exp(postPhiemom(phiProp,a=a,l=l,t=t,logscale=TRUE) - postPhiemom(phiCurrent,a=a,l=l,t=t,logscale=TRUE) + dinvgamma(phiCurrent,shape=approxpar['shape'],scale=approxpar['scale'],log=TRUE) - dinvgamma(phiProp,shape=approxpar['shape'],scale=approxpar['scale'],log=TRUE))
+    if (runif(1)< accprob) phiCurrent <- phiProp
+  } else {
+    phiCurrent <- 1/rgamma(1,shape=a,rate=l)
+  }
   return(phiCurrent)
 }
 

@@ -373,6 +373,25 @@ void proposalpmom(double *propPars, double *m, double *S, double *phi, int *r, d
   propPars[5]= 1-propPars[4];
 }
 
+//Expectation of prod_j th_j^{2*power} under multivariate Normal/T with mean m, covariance S, dimension n, degrees of freedom dof (dof=-1 for Normal)
+SEXP eprod_I(SEXP m, SEXP S, SEXP n, SEXP power, SEXP dof) {
+  SEXP ans;
+  PROTECT(ans = allocVector(REALSXP, 1));
+  //int i,j,nn=INTEGER(n)[0]; double **sigma;
+  //sigma= dmatrix(1,nn,1,nn);
+  //for (i=1; i<=nn; i++) {
+  //  for (j=1; j<i; j++) { sigma[i][j]= sigma[j][i]= REAL(S)[(j-1)*nn+(i-1)]; }
+  //  sigma[i][i]= REAL(S)[(i-1)*nn+(i-1)];
+  //}
+  //*REAL(ans)= mvtexpect(REAL(m)-1, sigma, nn, INTEGER(power)[0], REAL(dof)[0]);
+  //free_dmatrix(sigma, 1,nn,1,nn);
+  *REAL(ans)= mvtexpect_vec(REAL(m), REAL(S), INTEGER(n)[0], INTEGER(power)[0], REAL(dof)[0]);
+  UNPROTECT(1);
+  return ans;
+}
+
+
+
 //Univariate marginal density under a product MOM prior (known variance case)
 // integral N(y; x*theta, phi*I) * (theta^2/(tau*phi))^r * N(theta; 0; tau*phi) / (2r-1)!! d theta
 // - y: response variable (must be a vector)
@@ -957,7 +976,7 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   if (*nsel ==0) {
     term1= .5*(*(*pars).n + *(*pars).alpha);
     num= .5*(*(*pars).alpha)*log(*(*pars).lambda) + gamln(&term1);
-    den= .5*(*(*pars).n)*LOG_M_PI + gamln(&alphahalf);
+    den= .5*(*(*pars).n)*(LOG_M_PI) + gamln(&alphahalf);
     ans= num -den - term1*log(*(*pars).lambda + *(*pars).sumy2);
   } else {
     m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
@@ -1504,43 +1523,6 @@ double pimomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   }
   return(ans);
 }
-
-/*
-double pimomMarginalUC(int *sel, int *nsel, int *n, int *p, double *y, double *sumy2, double *x, double *XtX, double *ytX, double *tau, int *method, int *B, int *logscale, double *alpha, double *lambda) {
-  int i, j, zero=0, one=1;
-  double ans, er, sumer2, **V, **Vinv, *thest, ypred, phiest, intmc, intlapl, adj;
-
-  set_f2int_pars(XtX,ytX,tau,n,p,sel,nsel,y,sumy2,method,B,alpha,lambda);
-  if ((*method)==2) {
-    V= dmatrix(1,*nsel,1,*nsel); Vinv= dmatrix(1,*nsel,1,*nsel);
-    thest= dvector(1,*nsel);
-
-    addct2XtX(tau,XtX,sel,nsel,p,V); //add tau to diagonal elem of XtX
-    inv_posdef_upper(V,*nsel,Vinv);
-    Asym_xsel(Vinv,*nsel,ytX,sel,thest);
-    for (i=0, sumer2=0; i<(*n); i++) {
-      for (j=1, ypred=0; j<=(*nsel); j++) { ypred += x[i + (*n)*sel[j-1]] * thest[j]; }
-      er= y[i] - ypred;
-      sumer2+= er*er;
-    }
-    phiest= (sumer2 + (*lambda))/(*alpha + *n);
-    intmc= pimomMarginalKC(sel,nsel,n,p,y,sumy2,XtX,ytX,&phiest,tau,&one,B,&zero); //IS evaluation of marginal for phi=phiest
-    intlapl= pimomMarginalKC(sel,nsel,n,p,y,sumy2,XtX,ytX,&phiest,tau,&zero,B,&zero); //Laplace approx for phi=phiest
-    if (intlapl==0) { intmc+= 1.0e-300; intlapl+= 1.0e-300; } //avoid numerical zero
-    adj= intmc/intlapl;
-    f2int_pars.method= &zero;  //set method to eval marginal for known phi to Laplace approx
-
-    free_dmatrix(V,1,*nsel,1,*nsel); free_dmatrix(Vinv,1,*nsel,1,*nsel);
-    free_dvector(thest,1,*nsel);
-  } else {
-    adj= 1.0;
-  }
-
-  ans= adj * (qromo(f2int_imom,0.0,100,midpnt) + qromo(f2int_imom,100,1.0e30,midinf));
-  if ((*logscale)==1) ans= log(ans);
-  return(ans);
-}
-*/
 
 
 
