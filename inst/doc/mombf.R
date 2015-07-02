@@ -123,7 +123,7 @@ prior.mode <- seq(.01,1,length=100)^2
 taumom <- mode2g(prior.mode,prior='normalMom')
 bf1 <- mombf(lm1,coef=2,g=taumom)
 bf2 <- zellnerbf(lm1,coef=2,g=taumom)
-plot(prior.mode,bf1,type='l',ylab='BF')
+plot(prior.mode,bf1,type='l',ylab='BF',ylim=range(c(bf1,bf2)))
 lines(prior.mode,bf2,lty=2,col=2)
 abline(v=thest,lty=2)
 
@@ -135,7 +135,7 @@ prior.mode <- seq(.01,1,length=100)^2
 taumom <- mode2g(prior.mode,prior='normalMom')
 bf1 <- mombf(lm1,coef=2,g=taumom)
 bf2 <- zellnerbf(lm1,coef=2,g=taumom)
-plot(prior.mode,bf1,type='l',ylab='BF')
+plot(prior.mode,bf1,type='l',ylab='BF',ylim=range(c(bf1,bf2)))
 lines(prior.mode,bf2,lty=2,col=2)
 abline(v=thest,lty=2)
 

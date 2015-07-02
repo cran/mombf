@@ -32,6 +32,14 @@
 #define LOG_M_PI (1.1447298858494)
 #endif
 
+#if !defined(SIGN)
+#define SIGN(x) (((x) > 0.0) ? 1 : (((x) < 0.0) ? -1 : 0))
+#endif
+
+#if !defined(SETSIGN)
+#define SETSIGN(a,b) ((b) >= 0.0 ? fabs(a) : -fabs(a))
+#endif
+
 
 
 /**************************************************************/
@@ -197,8 +205,10 @@ void rA_plus_sB(double r, double **A, double s, double **B, double **C, int rowi
 void rAx_plus_sBy(double r, double **A, const double *x, double s, double **B, const double *y, double *z, int rowini, int rowfi, int colini, int colfi); //scalar*matrix*vector + scalar*matrix*vector
 void Ax_plus_y(double **A, const double *x, const double *y, double *z, int ini, int fi); //matrix*vector+vector
 void xA(const double *x, double **A, double *z, int ini, int fi);  //Multiply vector * matrix
-void Ax(double **A, const double *x, double *z, int rowini, int rowfi, int colini, int colfi);  //matrix * vector
+void Ax(double **A, const double *x, double *z, int rowini, int rowfi, int colini, int colfi);  //Returns z=A %*% x
 void Avecx(const double *A, const double *x, double *z, int rowini, int rowfi, int colini, int colfi); //same but A is in vector format
+void Aselvecx(const double *A, const double *x, double *z, int rowini, int rowfi, int *sel, int *nsel); //Returns z=A[,sel] %*% x
+void Atselvecx(const double *A, const double *x, double *z, int rowini, int rowfi, int *sel, int *nsel); //Returns z=t(A[,sel]) %*% x
 void Atvecx(const double *A, const double *x, double *z, int rowini, int rowfi, int colini, int colfi); //same for A' (row/col indexes refer to A')
 double xtAy(const double *x, double **A, const double *y, int ini, int fi); //t(vector)*matrix*vector
 
@@ -225,8 +235,10 @@ double min_xy(double x, double y);
 void minvec(const double *x, int ini, int fi, double *xmin, int *minpos); //min of a vector and position at which min occurs
 void maxvec(const double *x, int ini, int fi, double *xmax, int *maxpos); //max of a vector and position at which max occurs
 
-void choldc(double **a, int n, double **aout);   //Cholesky decomposition
-void choldc_inv(double **a, int n, double **aout); //Inverse of Cholesky decomposition
+void choldc(double **a, int n, double **aout, bool *posdef);   //Cholesky decomposition
+void choldc_inv(double **a, int n, double **aout, bool *posdef); //Inverse of chol(a)
+void cholS_inv(double **cholS, int n, double **cholSinv); //Inverse of cholS
+void choldc_inv_internal(double **cholS, int n); 
 double choldc_det(double **chols, int n); //Determinant of a symmetric def+ using its Cholesky decomp
 void inv_posdef(double **a, int n, double **aout); //Inverse of a symmetric, positive definite matrix
 void inv_posdef_upper(double **a, int n, double **aout); //Same but only returns upper triangular elements
@@ -237,6 +249,13 @@ void ludc(double **a, int n, int *indx, double *d); //LU decomposition (renamed 
 void lu_solve(double **a, int n, const int *indx, double b[]); //Solve A*x=b (renamed routine lubksb from NR)
 void lu_inverse(double **a, int n, double **aout); //Inverse of A[1..n][1..n]
 double lu_det(double **a, int n); //Determinant of A[1..n][1..n]
+
+
+void eigenvals(double **a, int n, double *vals); //eigenvalues of a
+void tred2(double **a, int n, double d[], double e[], bool getVecs); //Housholder reduction of real symmetric matrix a
+void tqli(double d[], double e[], int n, double **z, bool getVecs);
+double pythag(double a, double b);
+
 
 int dcompare(const void *a, const void *b);               
 void dvecsort(double *v, int size);                           //sort a vector using qsort from stdlib
@@ -325,10 +344,32 @@ double rgammaC(double a, double b); //a: shape; b: location; mean=a/b
 double dgammaC(double x, double a, double b); //a: shape; b: location; mean=a/b
 double dinvgammaC(double x, double a, double b, int logscale); //a: shape; b: location; mean of x= b/(a-1)
 
-// Non-local priors
-double dmomNorm(double y, double m, double tau, double phi, int r, int logscale); //Normal MOM prior (power is 2*r)
+// Non-local prior densities
+double dmom(double y, double m, double tau, double phi, int r, int logscale); //Univariate MOM prior (power is 2*r)
+double dmomvec(double *y, int n, double m, double tau, double phi, int r, int logscale); //Multivariate MOM prior
 double dimom(double y, double m, double tau, double phi, int logscale); //Univariate iMOM prior
+double dimomvec(double *y, int n, double m, double tau, double phi, int logscale); //Multivariate iMOM prior
+double demom(double y, double tau, double phi, int logscale); //Univariate eMOM prior
+double demomvec(double *y, int n, double tau, double phi, int logscale); //Multivariate eMOM prior
 
+// Non-local prior density derivatives
+void dmomgrad(double *ans, int *n, double *th, double *logphi, double *tau); //Gradient of log-pMOM density wrt th
+void dmomhess(double *ans, int *n, double *th, double *logphi, double *tau); //Hessian of log-pMOM density wrt th
+void dmomiggrad(double *ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda); //Grad log-pMOM + log-IG wrt (th,logphi)
+void dmomighess(double **ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda); //Hess log-pMOM + log-IG wrt (th,logphi)
+
+void dimomgrad(double *ans, int *n, double *th, double *logphi, double *tau); //Gradient of log-piMOM density wrt th
+void dimomhess(double *ans, int *n, double *th, double *logphi, double *tau); //Hessian of log-piMOM density wrt th
+void dimomiggrad(double *ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda); //Grad log-piMOM + log-IG wrt (th,logphi)
+void dimomighess(double **ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda);//Hess log-piMOM + log-IG wrt (th,logphi)
+
+void demomgrad(double *ans, int *n, double *th, double *logphi, double *tau); //Gradient of log-peMOM density wrt th
+void demomhess(double *ans, int *n, double *th, double *logphi, double *tau); //Hessian of log-peMOM density wrt th
+void demomiggrad(double *ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda); //Grad log-peMOM + log-IG wrt (th,logphi)
+void demomighess(double **ans, int *n, double *th, double *logphi, double *tau, double *alpha, double *lambda);//Hess log-peMOM + log-IG wrt (th,logphi)
+
+
+// Posterior sampling under non-local priors
 void rnlpPost_lm(double *ans, int niter, int burnin, int thinning, double *y, double *x, int n, int p, int r, double tau, double a_phi, double b_phi, int prior); //NLP posterior samples under linear model
 void rnlp(double *ans, int niter, int burnin, int thinning, double *m, double *Vvec, int p, int r, double tau, int prior); //NLP samples based on mean & covar
 void rnlp_Gibbs(double *th, int p, double *m, double **cholS, double **K, double *tau, double *phi, int r, int prior); //single Gibbs update 

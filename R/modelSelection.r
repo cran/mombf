@@ -26,7 +26,7 @@ setMethod("postProb", signature(object='msfit'), function(object, nmax) {
 
 
 #### General model selection routines
-modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1, burnin=round(niter/10), priorCoef=momprior(tau=0.348), priorDelta=modelbbprior(alpha.p=1,beta.p=1), priorVar=igprior(alpha=.01,lambda=.01), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', B=10^5, verbose=TRUE) {
+modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1, burnin=round(niter/10), family='normal', priorCoef=momprior(tau=0.348), priorDelta=modelbbprior(alpha.p=1,beta.p=1), priorVar=igprior(alpha=.01,lambda=.01), priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', B=10^5, verbose=TRUE) {
 # Input
 # - y: vector with response variable
 # - x: design matrix with all potential predictors
@@ -35,13 +35,15 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
 # - niter: number of Gibbs sampling iterations
 # - thinning: MCMC thinning factor, i.e. only one out of each thinning iterations are reported. Defaults to thinning=1, i.e. no thinning
 # - burnin: number of burn-in MCMC iterations. Defaults to 10% of niter. Set to 0 for no burn-in.
+# - family: assumed residual distribution ('normal','twopiecenormal','laplace','twopiecelaplace')
 # - priorCoef: prior distribution for the coefficients. Must be object of class 'msPriorSpec' with slot priorType set to 'coefficients'. Possible values for slot priorDistr are 'pMOM', 'piMOM' and 'peMOM'.
 # - priorDelta: prior on model indicator space. Must be object of class 'msPriorSpec' with slot priorType set to 'modelIndicator'. Possible values for slot priorDistr are 'uniform' and 'binomial'
 # - priorVar: prior on residual variance. Must be object of class 'msPriorSpec' with slot priorType set to 'nuisancePars'. Slot priorDistr must be equal to 'invgamma'.
+# - priorSkew: prior on residual skewness parameter. Ignored unless family=='twopiecenormal' or 'twopiecelaplace'
 # - phi: residual variance. Typically this is unknown and therefore left missing. If specified argument priorVar is ignored.
 # - deltaini: logical vector of length ncol(x) indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model
 # - initSearch: algorithm to refine deltaini. initSearch=='greedy' uses a greedy Gibbs sampling search. initSearch=='SCAD' sets deltaini to the non-zero elements in a SCAD fit with cross-validated regularization parameter. initSearch=='none' leaves deltaini unmodified.
-# - method: method to compute marginal densities. method=='Laplace' for Laplace approx, method=='MC' for Importance Sampling, method=='Hybrid' for Hybrid Laplace-IS (the latter method is only used for piMOM prior with unknown residual variance phi)
+# - method: method to compute marginal densities. method=='Laplace' for Laplace approx, method=='MC' for Importance Sampling, method=='Hybrid' for Hybrid Laplace-IS (the latter method is only used for piMOM prior with unknown residual variance phi), method='plugin'
 # - B: number of samples to use in Importance Sampling scheme. Ignored if method=='Laplace'.
 # - verbose: set verbose==TRUE to print iteration progress
 # Output: list
@@ -82,8 +84,10 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
     } else {
       method <- as.integer(2)
     }
+  } else if (method=='plugin') {
+    method <- as.integer(2)
   } else {
-    stop('Invalid argument method')
+    stop("Invalid 'method'")
   }
 
   #Format arguments for .Call
@@ -97,11 +101,18 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
   } else if (priorCoef@priorDistr=='peMOM') {
     r <- as.integer(1); prior <- as.integer(2)
     stop('eMOM prior not currently implemented. Try function emomLM instead')
+  } else if (priorCoef@priorDistr=='zellner') {
+    r <- as.integer(1); prior <- as.integer(3)
   } else {
     stop('Prior specified in priorDistr not recognized')
   }
   tau <- as.double(priorCoef@priorPars['tau'])
-  alpha <- as.double(priorVar@priorPars['alpha']); lambda <- as.double(priorVar@priorPars['lambda']) 
+  alpha <- as.double(priorVar@priorPars['alpha']); lambda <- as.double(priorVar@priorPars['lambda'])
+
+  taualpha <- as.double(priorSkew@priorPars['tau'])
+  if (family=='auto') { family <- 0 } else if (family=='normal') { family <- 1 } else if (family=='twopiecenormal') { family <- 2 } else if (family=='laplace') { family <- 3 } else if (family=='twopiecelaplace') { family <- 4 } else stop("family not available")
+  family <- as.integer(family)
+  
   if (priorDelta@priorDistr=='uniform') {
     prDelta <- as.integer(0)
     prDeltap <- as.double(0)
@@ -121,11 +132,12 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
     stop('Prior specified in priorDelta not recognized')
   }
 
+  
   #Initialize
   postMode <- rep(as.integer(0),p); postModeProb <- double(1)
   if (initSearch=='greedy') {
     niterGreed <- as.integer(100)
-    ans <- .Call("greedyVarSelCI", postMode,postModeProb,knownphi,prior,niterGreed,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
+    ans <- .Call("greedyVarSelCI", postMode,postModeProb,knownphi,family,prior,niterGreed,ndeltaini,deltaini,n,p,y,sumy2,x,XtX,ytX,method,B,alpha,lambda,phi,tau,taualpha,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
     ndeltaini <- as.integer(sum(postMode)); deltaini <- as.integer(which(as.logical(postMode))-1)
   } else if (initSearch=='SCAD') {
     #require(ncvreg)
@@ -142,7 +154,7 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1
   postSample <- rep(as.integer(0),p*mcmc2save)
   if (prDelta==2) postOther <- double(mcmc2save) else postOther <- double(0)
   margpp <- double(p); postProb <- double(mcmc2save)
-  ans <- .Call("modelSelectionCI", postSample,postOther,margpp,postMode,postModeProb,postProb,knownphi,prior,niter,thinning,burnin,ndeltaini,deltaini,n,p,y,sumy2,as.double(x),XtX,ytX,method,B,alpha,lambda,phi,tau,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
+  ans <- .Call("modelSelectionCI", postSample,postOther,margpp,postMode,postModeProb,postProb,knownphi,family,prior,niter,thinning,burnin,ndeltaini,deltaini,n,p,y,sumy2,as.double(x),XtX,ytX,method,B,alpha,lambda,phi,tau,taualpha,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
   postSample <- matrix(postSample,ncol=p)
   coef <- rep(0,ncol(x))
   if (any(postMode)) {
@@ -203,6 +215,12 @@ modelSelectionR <- function(y, x, niter=10^4, marginalFunction, priorFunction, b
 # - postMode: model with highest posterior probability amongst all those visited
 # - postModeProb: unnormalized posterior prob of posterior mode (log scale)
 # - postProb: unnormalized posterior prob of each visited model (log scale)
+if (class(y)=='Surv') {
+  if ((length(y)/2) != nrow(x)) stop("Dimensions of y and x do not match")
+} else {
+  if (length(y) != nrow(x)) stop("Dimensions of y and x do not match")
+}
+if (any(is.na(x))) stop("x cannot have missing values")
 p <- ncol(x)
 if (length(deltaini)!=p) stop('deltaini must be of length ncol(x)')
 if (!missing(betaBinPrior)) {
@@ -217,47 +235,68 @@ if (!missing(betaBinPrior)) {
 } else {
   postOther <- matrix(NA,nrow=niter,ncol=0)
 }
-sel <- postMode <- deltaini
-currentM <- marginalFunction(y=y,x=x[,sel,drop=FALSE],logscale=TRUE,...)
-currentP <- priorFunction(sel,logscale=TRUE)
-postModeProb <- currentM + currentP
-postSample <- matrix(NA,nrow=niter,ncol=p)
-margpp <- double(p)
-postProb <- double(niter)
-postProb[1] <- postModeProb
-niter10 <- ceiling(niter/10)
-for (i in 1:niter) {
-  for (j in 1:p) {
-    selnew <- sel; selnew[j] <- !sel[j]
-    newM <- marginalFunction(y=y,x=x[,selnew,drop=FALSE],logscale=TRUE,...)
-    newP <- priorFunction(selnew,logscale=TRUE)
-    if (newM+newP>postModeProb) {
-      postModeProb <- newM+newP
-      postMode <- selnew
+if (ncol(x)>12) {
+  sel <- postMode <- deltaini
+  currentJ <- postModeProb <- marginalFunction(y=y,x=x[,sel,drop=FALSE],logscale=TRUE,...) + priorFunction(sel,logscale=TRUE)
+  postSample <- matrix(NA,nrow=niter,ncol=p)
+  margpp <- double(p)
+  postProb <- double(niter)
+  k <- 1; postProb[k] <- postModeProb
+  names(postProb)[k] <- paste("V",which(sel),collapse=',',sep='')
+  niter10 <- ceiling(niter/10)
+  for (i in 1:niter) {
+    for (j in 1:p) {
+      selnew <- sel; selnew[j] <- !sel[j]
+      namenew <- paste(which(selnew),collapse=',')
+      newJ <- postProb[namenew]
+      if (is.na(newJ)) {
+        newJ <- marginalFunction(y=y,x=x[,selnew,drop=FALSE],logscale=TRUE,...) + priorFunction(selnew,logscale=TRUE)
+        k <- k+1; postProb[k] <- newJ
+        names(postProb)[k] <- paste("V",which(selnew),collapse=',',sep='')
+      }
+      if (newJ>postModeProb) {
+        postModeProb <- newJ
+        postMode <- selnew
+      }
+      pp <- 1/(1+exp(-currentJ+newJ))
+      if (sel[j]) {  #if variable in the model
+        sel[j] <- runif(1)<pp
+        margpp[j] <- margpp[j]+pp
+      } else {       #if variable not in the model
+        sel[j] <- runif(1)>pp
+        margpp[j] <- margpp[j]+1-pp
+      }
+      if (sel[j]==selnew[j]) {  #if value was updated, update marginal and prior densities
+        currentJ <- newJ
+      }
     }
-    pp <- 1/(1+exp(-currentM+newM-currentP+newP))
-    if (sel[j]) {  #if variable in the model
-      sel[j] <- runif(1)<pp
-      margpp[j] <- margpp[j]+pp
-    } else {       #if variable not in the model
-      sel[j] <- runif(1)>pp
-      margpp[j] <- margpp[j]+1-pp
+    if (!missing(betaBinPrior)) {
+      probBin <- rbeta(1,betaBinPrior['alpha.p']+sum(sel), betaBinPrior['beta.p']+sum(!sel))
+      postOther[i,'probBin'] <- probBin
     }
-    if (sel[j]==selnew[j]) {  #if value was updated, update marginal and prior densities
-      currentM <- newM
-      currentP <- newP
-    }
+    postSample[i,] <- sel
+    postProb[i] <- currentJ
+    if (verbose && ((i%%niter10)==0)) cat('.')
   }
-  if (!missing(betaBinPrior)) {
-    probBin <- rbeta(1,betaBinPrior['alpha.p']+sum(sel), betaBinPrior['beta.p']+sum(!sel))
-    postOther[i,'probBin'] <- probBin
-  }
-  postSample[i,] <- sel
-  postProb[i] <- currentM + currentP
-  if (verbose && ((i%%niter10)==0)) cat('.')
+  margpp <- margpp/niter
+  if (verbose) cat('\n')
+  #Format postProb
+  modelid <- sapply(apply(postSample,1,which),function(z) paste("V",z,collapse=',',sep=''))
+  postProb <- postProb[modelid]
+} else {
+  if (verbose) cat(paste("Computing posterior probabilities for all",2^ncol(x),"models..."))
+  models <- expand.grid(lapply(1:ncol(x),function(z) c(FALSE,TRUE)))
+  postProb <- apply(models,1, function(z) marginalFunction(y=y,x=x[,z,drop=FALSE],logscale=TRUE,...) + priorFunction(z,logscale=TRUE))
+  if (verbose) cat('\n')
+  postMode <- models[which.max(postProb),]
+  postModeProb <- max(postProb)
+  pp <- postProb - postModeProb; pp <- exp(pp)/sum(exp(pp))
+  sampledmodels <- rep(1:nrow(models), rmultinom(1,size=niter,prob=pp)[,1])
+  postSample <- models[sampledmodels,]
+  postProb <- postProb[sampledmodels]
+  margpp <- as.vector(t(models) %*% matrix(pp,ncol=1))
 }
-if (verbose) cat('\n')
-ans <- list(postSample=postSample,postOther=postOther,margpp=margpp/niter,postMode=postMode,postModeProb=postModeProb,postProb=postProb)
+ans <- list(postSample=postSample,postOther=postOther,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb)
 ans <- new("msfit",ans)
 return(ans)
 }
