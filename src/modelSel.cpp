@@ -44,6 +44,16 @@ pt2margFun set_marginalFunction(int *prCoef, int *knownphi, int *family) {
     } else if (*prCoef==3) {
       Rprintf("Zellner prior with two-piece Normal residuals not currently implemented");
     }
+  } else if ((*family)==0) { //Normal + Two-piece Normal + Laplace + Two-piece Laplace residuals
+    if (*prCoef==0) {
+      ans= pmomMargTP;
+    } else if (*prCoef==1) {
+      ans= pimomMargTP;
+    } else if (*prCoef==2) {
+      ans= pemomMargTP;
+    } else if (*prCoef==3) {
+      Rprintf("Zellner prior with two-piece Normal/Laplace residuals not currently implemented");
+    }
   } else {
     Rf_error("This error distribution is not available");
   }
@@ -195,6 +205,9 @@ void pmomLM(int *postModel, double *margpp, double *postCoef1, double *postCoef2
   sumpartialres2= sumres2;
   //MCMC iterations
   for (i=ilow; i< iupper; i++) {
+    //if (i==4124) {
+    //  printf("Debugging now\n");
+    //}
     //Sample (curCoef1,curModel)
     for (j=0; j< *(*pars).p1; j++) {
       if (curModel[j]) {
@@ -307,7 +320,11 @@ void MHTheta1pmom(int *newdelta, double *newcoef, double *pinclude, int *resupda
   }
   logbf= m0-m1;
   logpratio= priorFunction(curModel, &nsel0, pars) - priorFunction(curModel, &nsel1, pars); //we use curModel in both cases as priorFunction currently only depends on nb vars
-  *pinclude= 1.0/(1.0+exp(logbf+logpratio));
+  if ((!curModel[j]) && (((*nsel)+(*(*pars).p2)) >= n)) {
+    *pinclude= 0.0;
+  } else {
+    *pinclude= 1.0/(1.0+exp(logbf+logpratio));
+  }
   if (runif() < *pinclude) { deltaprop=1; } else { deltaprop=0; }
   //Propose coef
   nu= (int) sqrt((double) n);
@@ -565,6 +582,7 @@ void set_f2int_pars(double *XtX, double *ytX, double *tau, int *n, int *p, int *
 // - deltaini: vector with indexes of covariates initially in the model (both deltaini and its indexes must be indexed at 0)
 // - verbose: set verbose==1 to print iteration progress every 10% of the iterations
 // - pars: struct of type marginalPars containing parameters needed to evaluate the marginal density of the data & prior on model space
+// - family: residual distribution (1 for Normal; 2 for two-piece Normal; 3 for Laplace; 4 for two-piece Laplace). Set family==0 to perform inference on the family
 //Output
 // - postSample: matrix with niter rows and p columns with posterior samples for covariate inclusion/exclusion (formatted as a vector in column order)
 // - postOther: matrix with niter rows and nOther columns with posterior samples for other model parameters
@@ -580,7 +598,7 @@ SEXP modelSelectionCI(SEXP SpostSample, SEXP SpostOther, SEXP Smargpp, SEXP Spos
   SEXP ans;
 
   set_marginalPars(&pars, INTEGER(Sn), INTEGER(Sp), REAL(Sy), REAL(Ssumy2), REAL(Sx), REAL(SXtX), REAL(SytX), INTEGER(Smethod), INTEGER(SB), REAL(Salpha),REAL(Slambda), REAL(Sphi), REAL(Stau), REAL(Staualpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), &logscale, &offset);
-  modelSelectionGibbs2(INTEGER(SpostSample), REAL(SpostOther), REAL(Smargpp), INTEGER(SpostMode), REAL(SpostModeProb), REAL(SpostProb), INTEGER(Sknownphi), INTEGER(Sfamily), INTEGER(SpriorCoef), INTEGER(SpriorDelta), INTEGER(Sniter), INTEGER(Sthinning), INTEGER(Sburnin), INTEGER(Sndeltaini), INTEGER(Sdeltaini), INTEGER(Sverbose), &pars);
+  modelSelectionGibbs(INTEGER(SpostSample), REAL(SpostOther), REAL(Smargpp), INTEGER(SpostMode), REAL(SpostModeProb), REAL(SpostProb), INTEGER(Sknownphi), INTEGER(Sfamily), INTEGER(SpriorCoef), INTEGER(SpriorDelta), INTEGER(Sniter), INTEGER(Sthinning), INTEGER(Sburnin), INTEGER(Sndeltaini), INTEGER(Sdeltaini), INTEGER(Sverbose), &pars);
 
   PROTECT(ans = allocVector(REALSXP, 1));
   *REAL(ans)= 1.0;
@@ -591,102 +609,66 @@ SEXP modelSelectionCI(SEXP SpostSample, SEXP SpostOther, SEXP Smargpp, SEXP Spos
 
 
 void modelSelectionGibbs(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *family, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars) {
-  int i, j, k, *sel, *selnew, *selaux, nsel, nselnew, niter10, niterthin, savecnt, ilow, iupper;
-  double currentJ, newM, newP, newJ=0.0, ppnew, u;
+
+  bool copylast;
+  int i, j, k, *sel, *selnew, *selaux, nsel, nselnew, nselplus1, niter10, niterthin, savecnt, ilow, iupper, nbvars, nbfamilies=2, curfamily, newfamily;
+  double currentJ, newJ=0.0, ppnew, u, *mfamily, *pfamily, sumpfamily;
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
+  modselIntegrals *integrals;
+
 
   marginalFunction= set_marginalFunction(prCoef, knownphi, family);
   priorFunction= set_priorFunction(prDelta);
 
-  sel= ivector(0,*(*pars).p); selnew= ivector(0,*(*pars).p);
-
-  //Initialize
-  if (*verbose ==1) Rprintf("Running Gibbs sampler");
-  niterthin= (int) floor((*niter - *burnin +.0)/(*thinning+.0));
-  if (*niter >10) { niter10= *niter/10; } else { niter10= 1; }
-  for (j=0; j< *(*pars).p; j++) { margpp[j]= 0; }
-  nsel= *ndeltaini;
-  for (j=0; j< nsel; j++) { sel[j]= deltaini[j]; postMode[deltaini[j]]= 1; }
-  if ((*prDelta)==2) { postOther[0]= *(*pars).prDeltap; }
-  currentJ= marginalFunction(sel,&nsel,pars) + priorFunction(sel,&nsel,pars);
-  postProb[0]= *postModeProb= currentJ;
-  if (*burnin >0) { ilow=-(*burnin); savecnt=0; iupper= *niter - *burnin +1; } else { ilow=1; savecnt=1; iupper= *niter; } //if no burnin, start at i==1 & save initial value
-
-  //Iterate
-  for (i=ilow; i< iupper; i++) {
-    for (j=0; j< *(*pars).p; j++) {
-      sel2selnew(j,sel,&nsel,selnew,&nselnew); //copy sel into selnew, adding/removing jth element
-      if (nselnew <= (*(*pars).p)) {
-        newM= marginalFunction(selnew,&nselnew,pars);
-        newP= priorFunction(selnew,&nselnew,pars);
-        newJ= newM + newP;
-        if (newJ > *postModeProb) {   //update posterior mode
-          *postModeProb= newJ;
-          for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
-          for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; }
-        }
-        ppnew= 1.0/(1.0+exp(currentJ-newJ));
-        if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
-      } else {
- 	ppnew= -0.01;
-      }
-      u= runif();
-      if (u<ppnew) {  //update model indicator
-        selaux= sel; sel=selnew; selnew=selaux; nsel=nselnew; currentJ= newJ;
-      }
-    }  //end j for
-    if ((i>0) && ((i%(*thinning))==0)) {
-      if ((*prDelta)==2) {
-        *(*pars).prDeltap= rbetaC(nsel + (*pars).parprDeltap[0], *(*pars).p - nsel + (*pars).parprDeltap[1]);
-        postOther[savecnt]= *(*pars).prDeltap;
-      }
-      for (j=0; j<nsel; j++) { postSample[sel[j]*niterthin+savecnt]= 1; }
-      postProb[savecnt]= currentJ;
-      savecnt++;
-    }
-    if ((*verbose==1) && ((i%niter10)==0)) { Rprintf("."); }
+  mfamily= dvector(0,nbfamilies-1); pfamily= dvector(0,nbfamilies-1);
+  if ((*family)==0) { 
+    nbvars= (*(*pars).p)+1; 
+    integrals= new modselIntegrals(marginalFunction, priorFunction, (*(*pars).p) +2);
+    copylast= true;
+  } else { 
+    nbvars= (*(*pars).p);
+    integrals= new modselIntegrals(marginalFunction, priorFunction, (*(*pars).p));
+    copylast= false;
   }
-  if (iupper>ilow) { for (j=0; j< *(*pars).p; j++) { margpp[j] /= (iupper-imax_xy(0,ilow)+.0); } } //from sum to average
-  if (*verbose==1) Rprintf(" Done.\n");
 
-  free_ivector(sel,0,*(*pars).p); free_ivector(selnew,0,*(*pars).p);
-}
-
-//Same as modelSelectionGibbs, but log(integrated likelihood) + log(prior) are managed through an object of class modselIntegrals
-void modelSelectionGibbs2(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *family, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars) {
-  int i, j, k, *sel, *selnew, *selaux, nsel, nselnew, niter10, niterthin, savecnt, ilow, iupper;
-  double currentJ, newJ=0.0, ppnew, u;
-  pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
-
-  marginalFunction= set_marginalFunction(prCoef, knownphi, family);
-  priorFunction= set_priorFunction(prDelta);
-
-  modselIntegrals *integrals= new modselIntegrals(marginalFunction, priorFunction, *(*pars).p);
-
-  sel= ivector(0,*(*pars).p); selnew= ivector(0,*(*pars).p);
+  sel= ivector(0,nbvars); selnew= ivector(0,nbvars);
 
   //Initialize
   if (*verbose ==1) Rprintf("Running Gibbs sampler");
   niterthin= (int) floor((*niter - *burnin +.0)/(*thinning+.0));
   if (*niter >10) { niter10= *niter/10; } else { niter10= 1; }
-  for (j=0; j< *(*pars).p; j++) { margpp[j]= 0; }
+  for (j=0; j< nbvars; j++) { margpp[j]= 0; }
   nsel= *ndeltaini;
   for (j=0; j< nsel; j++) { sel[j]= deltaini[j]; postMode[deltaini[j]]= 1; }
   if ((*prDelta)==2) { postOther[0]= *(*pars).prDeltap; }
-  currentJ= integrals->getJoint(sel,&nsel,pars);
+  if ((*family)==0) { 
+    sel[nsel]= (*(*pars).p);  //initialize to baseline model
+    nselplus1= nsel+1;
+    currentJ= integrals->getJoint(sel,&nselplus1,pars);
+  } else {
+    currentJ= integrals->getJoint(sel,&nsel,pars);
+  }
   postProb[0]= *postModeProb= currentJ;
   if (*burnin >0) { ilow=-(*burnin); savecnt=0; iupper= *niter - *burnin +1; } else { ilow=1; savecnt=1; iupper= *niter; } //if no burnin, start at i==1 & save initial value
 
   //Iterate
   for (i=ilow; i< iupper; i++) {
     for (j=0; j< *(*pars).p; j++) {
-      sel2selnew(j,sel,&nsel,selnew,&nselnew); //copy sel into selnew, adding/removing jth element
-      if (nselnew <= (*(*pars).p)) {
-        newJ= integrals->getJoint(selnew,&nselnew,pars);
+      sel2selnew(j,sel,&nsel,selnew,&nselnew,copylast); //copy sel into selnew, adding/removing jth element
+      if (nselnew <= (*(*pars).n)) {
+	if ((*family)==0) {  //inference is being done on the family
+	  nselplus1= nselnew+1;
+	  newJ= integrals->getJoint(selnew,&nselplus1,pars);
+	} else {  //family is fixed
+	  newJ= integrals->getJoint(selnew,&nselnew,pars);
+	}
         if (newJ > *postModeProb) {   //update posterior mode
           *postModeProb= newJ;
           for (k=0; k< *(*pars).p; k++) { postMode[k]= 0; }
           for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; }
+	  if ((*family)==0) { 
+	    if (selnew[nselnew]== (*(*pars).p)) { postMode[*(*pars).p]= 0; } else { postMode[*(*pars).p]= 1; }
+	  }
         }
         ppnew= 1.0/(1.0+exp(currentJ-newJ));
         if (i>=0) { if (nselnew>nsel) { margpp[j]+= ppnew; } else { margpp[j]+= (1-ppnew); } }
@@ -698,23 +680,52 @@ void modelSelectionGibbs2(int *postSample, double *postOther, double *margpp, in
         selaux= sel; sel=selnew; selnew=selaux; nsel=nselnew; currentJ= newJ;
       }
     }  //end j for
+
+    if ((*family)==0) {  //update family
+      nselplus1= nsel+1;
+      curfamily= sel[nsel] - (*(*pars).p);
+      sumpfamily= 0;
+      for (j=0; j<nbfamilies; j++) {
+	if (j==curfamily) {
+	  mfamily[j]= currentJ;
+	  pfamily[j]= 1.0;
+	  sumpfamily += 1.0; 
+	} else {
+	  sel[nsel]= (*(*pars).p) + j;
+	  mfamily[j]= integrals->getJoint(sel,&nselplus1,pars);
+	  pfamily[j]= exp(mfamily[j] - currentJ);
+	  sumpfamily += pfamily[j];
+	}
+      }
+      for (j=0; j<nbfamilies; j++) { pfamily[j] /= sumpfamily; }
+      rmultinomial(1, nbfamilies, pfamily, &newfamily);
+      sel[nsel]= (*(*pars).p) + newfamily;
+      if (i>=0) { margpp[*(*pars).p]+= pfamily[1]; } //change to pfamily[1]+pfamily[3] when skew-laplace is available
+      currentJ= mfamily[newfamily];
+    }
+
     if ((i>0) && ((i%(*thinning))==0)) {
       if ((*prDelta)==2) {
         *(*pars).prDeltap= rbetaC(nsel + (*pars).parprDeltap[0], *(*pars).p - nsel + (*pars).parprDeltap[1]);
         postOther[savecnt]= *(*pars).prDeltap;
       }
       for (j=0; j<nsel; j++) { postSample[sel[j]*niterthin+savecnt]= 1; }
+      if ((*family)==0) { 
+	if (sel[nsel]== (*(*pars).p)) { postSample[(*(*pars).p)*niterthin + savecnt]= 0; } else { postSample[(*(*pars).p)*niterthin + savecnt]= 1; }
+      }
       postProb[savecnt]= currentJ;
       savecnt++;
     }
     if ((*verbose==1) && ((i%niter10)==0)) { Rprintf("."); }
   }
-  if (iupper>ilow) { for (j=0; j< *(*pars).p; j++) { margpp[j] /= (iupper-imax_xy(0,ilow)+.0); } } //from sum to average
+  if (iupper>ilow) { for (j=0; j<nbvars; j++) { margpp[j] /= (iupper-imax_xy(0,ilow)+.0); } } //from sum to average
   if (*verbose==1) Rprintf(" Done.\n");
 
-  free_ivector(sel,0,*(*pars).p); free_ivector(selnew,0,*(*pars).p);
+  free_ivector(sel,0,nbvars); free_ivector(selnew,0,nbvars);
+  free_dvector(mfamily,0,nbfamilies-1); free_dvector(pfamily,0,nbfamilies-1);
   delete integrals;
 }
+
 
 //greedyVarSelC: greedy search for posterior mode in variable selection.
 //               Similar to Gibbs sampling, except that deterministic updates are made iff there is an increase in post model prob
@@ -752,7 +763,7 @@ void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *fami
   //Iterate
   for (i=0, nchanges=1; (i< *niter) && (nchanges>0); i++) {
     for (j=0, nchanges=0; j< *(*pars).p; j++) {
-      sel2selnew(j,sel,&nsel,selnew,&nselnew); //copy sel into selnew, adding/removing jth element
+      sel2selnew(j,sel,&nsel,selnew,&nselnew,false); //copy sel into selnew, adding/removing jth element
       newJ= marginalFunction(selnew,&nselnew,pars) + priorFunction(selnew,&nselnew,pars);
       if (newJ > *postModeProb) {
         *postModeProb= newJ;  //update post mode prob
@@ -769,18 +780,20 @@ void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *fami
 
 
 
-void sel2selnew(int newelem,int *sel,int *nsel,int *selnew,int *nselnew) {
+void sel2selnew(int newelem,int *sel,int *nsel,int *selnew,int *nselnew, bool copylast) {
 //Copy sel into selnew.
 // - If j in sel, don't copy it in selnew and set nselnew=nsel-1.
 // - If j not in sel, add it to selnew and set nselnew=nsel+1.
+// - If copylast==true, copy last element sel[nsel] into selnew[nselnew]
   int i, ii, found;
   for (i=0, found=0; (i< *nsel) && (found==0); i++) { selnew[i]= sel[i]; found= (newelem==sel[i]); }
   if (found==0) { //add newelem
-    selnew[i]= newelem; (*nselnew)= (*nsel)+1;
+    selnew[*nsel]= newelem; (*nselnew)= (*nsel)+1;
   } else {  //remove new elem
     for (ii=i; ii< *nsel; ii++) { selnew[ii-1]= sel[ii]; }
     (*nselnew)= (*nsel)-1;
   }
+  if (copylast) selnew[*nselnew]= sel[*nsel];
 }
 
 
@@ -815,7 +828,7 @@ double betabinPrior_modavg(int *sel, int *nsel, struct modavgPars *pars) {
 //*************************************************************************************
 
 
-void leastsquares(double *theta, double *phi, double *ypred, double *y, double *x, double *XtX, double *ytX, int *n, int *sel, int *nsel) {
+void leastsquares(double *theta, double *phi, double *ypred, double *y, double *x, double *XtX, double *ytX, int *n, int *p, int *sel, int *nsel) {
   //Least squares estimate for y= x[,sel] %*% theta + e, where e ~ N(0,phi)   (phi is the variance)
   //Input
   // - y: observed response
@@ -826,7 +839,7 @@ void leastsquares(double *theta, double *phi, double *ypred, double *y, double *
   //Output
   // - theta: least squares estimate for theta
   // - phi: MLE for residual variance (i.e. SSR/n). If <1.0e-10 then phi=1.0e-10 is returned
-  // - ypred: predicted y, i.e. x[,sel] %*% theta where theta is the least squares estimate
+  // - ypred[0..n-1]: predicted y, i.e. x[,sel] %*% theta where theta is the least squares estimate
   int i;
   double zero=0, **S, **Sinv, detS, e;
 
@@ -835,7 +848,7 @@ void leastsquares(double *theta, double *phi, double *ypred, double *y, double *
 
   if ((*nsel)>0) {
     //Least squares
-    addct2XtX(&zero,XtX,sel,nsel,nsel,S);
+    addct2XtX(&zero,XtX,sel,nsel,p,S);
     invdet_posdef(S,*nsel,Sinv,&detS);
     Asym_xsel(Sinv,*nsel,ytX,sel,theta);
 
@@ -858,8 +871,108 @@ void leastsquares(double *theta, double *phi, double *ypred, double *y, double *
 
 
 //*************************************************************************************
+// MARGINAL LIKELIHOOD UNDER NORMAL / TWO-PIECE NORMAL / LAPLACE / TWO-PIECE LAPLACE RESIDUALS
+//*************************************************************************************
+
+//The first nsel elements in sel indicate variables in/out of the model
+//Element nsel+1 indicates single-piece if equal to p+1, two-piece if equal to p+2
+// - Example1: If nsel=2,p=10 and sel=(2,5,11) then variables 2 and 5 are in the model, and residuals are Normal
+// - Example2: If nsel=2,p=10 and sel=(2,5,12) then variables 2 and 5 are in the model, and residuals are two-piece Normal
+// - Example3: If nsel=1,p=10 and sel=(0,11) then variables 0 is in the model and residuals are Normal
+
+
+double pmomMargTP(int *sel, int *nsel, struct marginalPars *pars) {
+  int p= (*((*pars).p)), nvars= *nsel -1;
+  double ans;
+
+  if (sel[nvars] == p) { //Normal residuals
+
+    ans= pmomMarginalUC(sel, &nvars, pars);
+
+  } else if (sel[nvars]== (p+1)) { //Two-piece Normal residuals
+
+    int prior=1;
+    ans= nlpMargSkewNorm(sel, &nvars, pars, &prior);
+
+  } else {
+    Rf_error("Invalid residual distribution\n");
+  }
+
+  return ans;
+}
+
+
+double pimomMargTP(int *sel, int *nsel, struct marginalPars *pars) {
+  int p= (*((*pars).p)), nvars= *nsel -1;
+  double ans;
+
+  if (sel[nvars] == p) { //Normal residuals
+
+    ans= pimomMarginalUC(sel, &nvars, pars);
+
+  } else if (sel[nvars]== (p+1)) { //Two-piece Normal residuals
+
+    int prior=2;
+    ans= nlpMargSkewNorm(sel, &nvars, pars, &prior);
+
+  } else {
+    Rf_error("Invalid residual distribution\n");
+  }
+
+  return ans;
+}
+
+
+double pemomMargTP(int *sel, int *nsel, struct marginalPars *pars) {
+  int p= (*((*pars).p)), nvars= *nsel -1;
+  double ans;
+
+  if (sel[nvars] == p) { //Normal residuals
+
+    ans= pemomMarginalUC(sel, &nvars, pars);
+
+  } else if (sel[nvars]== (p+1)) { //Two-piece Normal residuals
+
+    int prior=3;
+    ans= nlpMargSkewNorm(sel, &nvars, pars, &prior);
+
+  } else {
+    Rf_error("Invalid residual distribution\n");
+  }
+
+  return ans;
+}
+
+
+
+//*************************************************************************************
 // TWO-PIECE NORMAL ROUTINES
 //*************************************************************************************
+
+SEXP nlpMarginalSkewNormI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Staualpha, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda, SEXP SprCoef) {
+  int prCoef= INTEGER(SprCoef)[0];
+  double *rans, emptydouble=0, offset=0;
+  struct marginalPars pars;
+  SEXP ans;
+
+  set_marginalPars(&pars,INTEGER(Sn),INTEGER(Sp),REAL(Sy),REAL(Ssumy2),REAL(Sx),REAL(SXtX),REAL(SytX),INTEGER(Smethod),INTEGER(SB),REAL(Salpha),REAL(Slambda),&emptydouble,REAL(Stau),REAL(Staualpha),INTEGER(Sr),&emptydouble,&emptydouble,INTEGER(Slogscale),&offset);
+
+  PROTECT(ans = allocVector(REALSXP, 1));
+  rans = REAL(ans);
+  if (prCoef==0) {
+    *rans= pmomMargSkewNormU(INTEGER(Ssel), INTEGER(Snsel), &pars);
+  } else if (prCoef==1) {
+    *rans= pimomMargSkewNormU(INTEGER(Ssel), INTEGER(Snsel), &pars);
+  } else if (prCoef==2) {
+    *rans= pemomMargSkewNormU(INTEGER(Ssel), INTEGER(Snsel), &pars);
+  } else {
+    Rf_error("Wrong prior specified\n");
+  }
+  UNPROTECT(1);
+  return ans;
+}
+
+
 
 double pmomMargSkewNormU(int *sel, int *nsel, struct marginalPars *pars) {
   int prior=1;
@@ -888,17 +1001,16 @@ double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prio
 // Output: integrated likelihood
 
   bool initmle=true, posdef;
-  int maxit= 20, p= (*nsel)+2, n= (*((*pars).n));
-  double ans, *thmode, fmode, **hess, **cholhess, d, det, *ypred;
+  int maxit= 50, p= (*nsel)+2, n= (*((*pars).n));
+  double ans, *thmode, fmode, **hess, **cholhess, det, *ypred;
 
   thmode= dvector(1,p); hess= dmatrix(1, p, 1, p); ypred=dvector(0,n-1);
 
-  postmodeSkewNorm(thmode, &fmode, hess, sel, nsel, (*pars).n, (*pars).y, (*pars).x, (*pars).XtX, (*pars).ytX, &maxit, (*pars).tau, (*pars).taualpha, (*pars).alpha, (*pars).lambda, &initmle, prior);
+  postmodeSkewNorm(thmode, &fmode, hess, sel, nsel, (*pars).n, (*pars).p, (*pars).y, (*pars).x, (*pars).XtX, (*pars).ytX, &maxit, (*pars).tau, (*pars).taualpha, (*pars).alpha, (*pars).lambda, &initmle, prior);
 
-  if ((*(*pars).method ==0) | (*(*pars).method ==0)) { //Laplace or MC
+  if ((*(*pars).method ==0) | (*(*pars).method ==1)) { //Laplace or MC
 
     cholhess= dmatrix(1,p,1,p);
-    d= p + 2.0;
     choldc(hess,p,cholhess,&posdef);
     if (!posdef) {
       int i;
@@ -915,24 +1027,24 @@ double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prio
 
     if (*(*pars).method ==0) { //Laplace
 
-      ans= -fmode + 0.5 * d * LOG_M_2PI - 0.5*log(det);
+      ans= -fmode + 0.5 * p * LOG_M_2PI - 0.5*log(det);
 
-    } else if (*(*pars).method ==0) { //Monte Carlo
+    } else if (*(*pars).method ==1) { //Monte Carlo
 
       int i, j, nu=3;
-      double *thsim, **cholV, **cholVinv, ctnu= (nu+2.0)/(nu+.0), detVinv, term1, term2;
+      double *thsim, **cholV, **cholVinv, ctnu= sqrt((nu-2.0)/(nu+.0)), detVinv, term1, term2;
 
       thsim= dvector(1, p); cholV= dmatrix(1,p,1,p); cholVinv= dmatrix(1,p,1,p);
 
-      thmode[p+1]= log(thmode[p+1]); thmode[p+2]= atanh(thmode[p+2]);
+      thmode[p-1]= log(thmode[p-1]); thmode[p]= atanh(thmode[p]);
       cholS_inv(cholhess, p, cholV);
       for (i=1; i<=p; i++) {
-	for (j=i; j<=p; j++) {
-	  cholV[i][j]= sqrt(ctnu) * cholV[i][j];
-	  cholVinv[i][j]= sqrt(ctnu) * hess[i][j];
+	for (j=1; j<=i; j++) {
+	  cholV[i][j]= cholV[i][j] * ctnu;
+	  cholVinv[i][j]= cholhess[i][j] / ctnu;
 	}
       }
-      detVinv= exp(log(det) + p * log(ctnu));
+      detVinv= exp(log(det) - 2*p*log(ctnu));
 
       ans= 0;
       for (i=1; i<= (*(*pars).B); i++) {
@@ -953,14 +1065,14 @@ double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prio
   }
   if (*((*pars).logscale) == 0) ans= exp(ans);
 
-  free_dvector(thmode, 0,p); free_dmatrix(hess, 1,p,1,p); free_dvector(ypred,0,n-1);
+  free_dvector(thmode, 1,p); free_dmatrix(hess, 1,p,1,p); free_dvector(ypred,0,n-1);
   return(ans);
 
 }
 
 
 
-void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, double *y, double *x, double *XtX, double *ytX, int *maxit, double *tau, double *taualpha, double *alpha, double *lambda, bool *initmle, int *prior) {
+void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, int *pvar, double *y, double *x, double *XtX, double *ytX, int *maxit, double *tau, double *taualpha, double *alpha, double *lambda, bool *initmle, int *prior) {
 //Posterior mode for two-piece normal under pMOM, piMOM or peMOM prior on (theta,atanh(alpha)) and vartheta ~ IG(alpha/2,lambda/2)
   // Input
   // - y: observed response
@@ -971,25 +1083,25 @@ void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, in
   // - alpha, lambda: prior on vartheta ~ IG(alpha/2,lambda/2)
   // - init: init=='mle' to initialize at MLE, else initialize at least squares
   // Ouput
-  // - thmode: posterior mode for (theta,vartheta,alpha) (i.e. in original parameterization)
+  // - thmode[1..nsel]: posterior mode for (theta,vartheta,alpha) (i.e. in original parameterization)
   // - fmode: minus log-joint evaluated at thmode
   // - hess: hessian evaluated at thmode
 
   bool posdef;
-  int i, ii, j, p=(*nsel)+2;
+  int i, ii, j, p=(*nsel)+2, itermle=10;
   double err, damp, *g, **H, **Hinv, *delta, lmin=0, *vals, fnew, *thnew, *ypred;
 
   ypred= dvector(0,*n -1);
 
   if (*initmle) {  //Initialize at MLE
 
-    mleSkewnorm(thmode, y, x, maxit);
+    mleSkewnorm(thmode, ypred, sel, nsel, n, pvar, y, x, XtX, ytX, &itermle, false);
 
   } else {  //Initialize at least-squares for theta; set (phi,alpha)= argmax likelihood for given theta
 
     double s1=0, s2=0, pows1, pows2;
 
-    leastsquares(thmode, thmode+p+1, ypred, y, x, XtX, ytX, n, sel, nsel);
+    leastsquares(thmode, thmode+p+1, ypred, y, x, XtX, ytX, n, pvar, sel, nsel);
 
     for (i=0; i<(*n); i++) {
       if (y[i]<=ypred[i]) { s1+= pow(y[i]-ypred[i], 2.0); } else { s2+= pow(y[i]-ypred[i], 2.0); }
@@ -1007,7 +1119,7 @@ void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, in
   g= dvector(1,p); delta= dvector(1,p); thnew= dvector(1,p);
   H= dmatrix(1,p,1,p); Hinv= dmatrix(1,p,1,p);
 
-  i=1; err=1; damp=0.01;
+  i=1; err=1; damp=2.0;
 
   fnegSkewnorm(fmode,ypred,thmode,sel,nsel,n,y,x,XtX,tau,taualpha,alpha,lambda,prior,true);
 
@@ -1016,7 +1128,7 @@ void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, in
     fpnegSkewnorm(g,thmode,ypred,sel,nsel,n,y,x,tau,taualpha,alpha,lambda,prior); //gradient
     fppnegSkewnorm(H,thmode,ypred,sel,nsel,n,y,x,tau,taualpha,alpha,lambda,prior); //Hessian
 
-    choldc_inv(H,p,Hinv,&posdef);
+    inv_posdef(H,p,Hinv,&posdef);
 
     if (posdef) {
       Ax(Hinv,g,delta,1,p,1,p);
@@ -1035,24 +1147,39 @@ void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, in
     for (j=1; j<=p; j++) { thnew[j]= thmode[j] - delta[j]; }
     fnegSkewnorm(&fnew,ypred,thnew,sel,nsel,n,y,x,XtX,tau,taualpha,alpha,lambda,prior,true);
 
+    //If Newton update fails, use gradient algorithm
+    //ii= 1;
+    //if (fnew > (*fmode)) {
+    //  //Set gradient norm equal to norm of attempted Newton step size
+    //  double deltanorm=0, gnorm=0, norm; 
+    //  for (j=1; j<=p; j++) { deltanorm += pow(delta[j],2.0); gnorm += pow(g[j],2.0); }
+    //  norm= sqrt(deltanorm/gnorm);
+    //  for (j=1; j<=p; j++) { delta[j]= g[j] * norm; } 
+    //  while ((fnew > (*fmode)) & (ii<5)) {
+    //for (j=1; j<=p; j++) delta[j] /= damp;  //decrease step size
+    //for (j=1; j<=p; j++) { thnew[j]= thmode[j] - delta[j]; }
+    //fnegSkewnorm(&fnew,ypred,thnew,sel,nsel,n,y,x,XtX,tau,taualpha,alpha,lambda,prior,true);
+    //ii++;
+    //}
+    //}
+
     //If Newton update fails, use Levenberg-Marquardt (LMA)
     ii= 1;
-    while ((fnew > (*fmode)) & (ii<5)) {
-      for (j=1; j<=p; j++) H[j][j] *= (1.0+damp);
-      choldc_inv(H,p,Hinv,&posdef);
-      Ax(Hinv,g,delta,1,p,1,p);
-      for (j=1; j<=p; j++) { thnew[j]= thmode[j] - delta[j]; }
-      fnegSkewnorm(&fnew,ypred,thnew,sel,nsel,n,y,x,XtX,tau,taualpha,alpha,lambda,prior,true);
-      ii++;
+    if (fnew > (*fmode)) { 
+      while ((fnew > (*fmode)) & (ii<5)) {
+    	for (j=1; j<=p; j++) H[j][j] *= damp;
+    	inv_posdef(H,p,Hinv,&posdef);
+    	Ax(Hinv,g,delta,1,p,1,p);
+    	for (j=1; j<=p; j++) { thnew[j]= thmode[j] - delta[j]; }
+    	fnegSkewnorm(&fnew,ypred,thnew,sel,nsel,n,y,x,XtX,tau,taualpha,alpha,lambda,prior,true);
+    	ii++;
+      }
     }
 
     //If new value improves target function, update thmode, fmode
     if (fnew<(*fmode)) {
       err= 0;
-      for (j=1; j<=p; j++) {
-	err= max_xy(err,fabs(delta[j]));
-	thmode[j]= thnew[j];
-      }
+      for (j=1; j<=p; j++) { err= max_xy(err,fabs(delta[j])); thmode[j]= thnew[j]; }
       (*fmode)= fnew;
       i++;
     } else {
@@ -1063,9 +1190,17 @@ void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, in
   thmode[p-1]= exp(thmode[p-1]);
   thmode[p]= tanh(thmode[p]); //Note: tanh(z)= -1 + 2/(1+exp(-2*z))
 
-  for (i=1; i<=p; i++) {
-    hess[i][i]= H[i][i];
-    for (j=1; j<i; j++) { hess[i][j]= hess[j][i]= H[i][j]; }
+  if (ii==1) { //LMA update not used in last iteration
+    for (i=1; i<=p; i++) {
+      hess[i][i]= H[i][i];
+      for (j=1; j<i; j++) { hess[i][j]= hess[j][i]= H[i][j]; }
+    } 
+  } else {  //LMA update used, which modifies H
+    damp= pow(damp,ii - 1.0);
+    for (i=1; i<=p; i++) {
+      hess[i][i]= H[i][i] / damp;
+      for (j=1; j<i; j++) { hess[i][j]= hess[j][i]= H[i][j]; }
+    } 
   }
 
   free_dvector(ypred, 0,*n -1); free_dvector(g,1,p); free_dvector(delta,1,p); free_dvector(thnew,1,p);
@@ -1080,7 +1215,9 @@ void fnegSkewnorm(double *ans, double *ypred, double *th, int *sel, int *nsel, i
 // Input
 // - th[1..nsel+2]: (theta, log(vartheta), atanh(alpha)) where theta=regression coef, vartheta \propto variance and alpha=asymmetry parameter in [-1,1]
 // - Other parameters as in postmodeSkewNorm
-// Output: value of minus the log-joint evaluated at th
+// Output: 
+// - ans: value of minus the log-joint evaluated at th
+// - ypred: linear predictor x %*% th
   double scale, alpha;
 
   scale= exp(th[*nsel +1]);
@@ -1091,25 +1228,25 @@ void fnegSkewnorm(double *ans, double *ypred, double *th, int *sel, int *nsel, i
   if ((*prior)==1) {
 
     if ((*nsel)>0) {
-      (*ans) += -dmomvec(th+1,*nsel,0.0,*tau,scale,1,1) - dmom(alpha,0.0,*taualpha,1.0,1,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -dmomvec(th+1,*nsel,0.0,*tau,scale,1,1) - dmom(th[*nsel +2],0.0,*taualpha,1.0,1,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     } else {
-      (*ans) += -dmom(alpha,0.0,*taualpha,1.0,1,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -dmom(th[*nsel +2],0.0,*taualpha,1.0,1,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     }
 
   } else if ((*prior)==2) {
 
     if ((*nsel)>0) {
-      (*ans) += -dimomvec(th+1,*nsel,0.0,*tau,scale,1) - dimom(alpha,0.0,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -dimomvec(th+1,*nsel,0.0,*tau,scale,1) - dimom(th[*nsel +2],0.0,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     } else {
-      (*ans) += -dimom(alpha,0.0,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -dimom(th[*nsel +2],0.0,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     }
 
   } else if ((*prior)==3) {
 
     if ((*nsel)>0) {
-      (*ans) += -demomvec(th+1,*nsel,*tau,scale,1) - demom(alpha,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -demomvec(th+1,*nsel,*tau,scale,1) - demom(th[*nsel +2],*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     } else {
-      (*ans) += -demom(alpha,*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
+      (*ans) += -demom(th[*nsel +2],*taualpha,1.0,1) - dinvgammaC(scale,0.5*(*alphaphi),0.5*(*lambdaphi),1);
     }
 
   } else {
@@ -1134,26 +1271,26 @@ void fpnegSkewnorm(double *g, double *th, double *ypred, int *sel, int *nsel, in
 
   if ((*prior)==1) {
 
-    dmomiggrad(gprior+1,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    dmomiggrad(gprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) { g[i] -= gprior[i]; }
 
-    dmomgrad(gprior+(*nsel)+2,&one,th+(*nsel)+2,&zero,taualpha);
+    dmomgrad(gprior+(*nsel)+1,&one,th+(*nsel)+1,&zero,taualpha);
     g[(*nsel)+2] -= gprior[(*nsel)+2];
 
   } else if ((*prior)==2) {
 
-    dimomiggrad(gprior+1,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    dimomiggrad(gprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) { g[i] -= gprior[i]; }
 
-    dimomgrad(gprior+(*nsel)+2,&one,th+(*nsel)+2,&zero,taualpha);
+    dimomgrad(gprior+(*nsel)+1,&one,th+(*nsel)+1,&zero,taualpha);
     g[(*nsel)+2] -= gprior[(*nsel)+2];
 
   } else if ((*prior)==3) {
 
-    dimomiggrad(gprior+1,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    demomiggrad(gprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) { g[i] -= gprior[i]; }
 
-    dimomgrad(gprior+(*nsel)+2,&one,th+(*nsel)+2,&zero,taualpha);
+    demomgrad(gprior+(*nsel)+1,&one,th+(*nsel)+1,&zero,taualpha);
     g[(*nsel)+2] -= gprior[(*nsel)+2];
 
   } else {
@@ -1170,15 +1307,16 @@ void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, 
  //Hessian of fnegSkewnorm
 
   int i, j, one=1, nselplus1= (*nsel)+1;
-  double **Hprior, hprioralpha, zero=0;
+  double **Hprior, *hprioralpha, zero=0;
 
   Hprior= dmatrix(1,nselplus1,1,nselplus1);
+  hprioralpha= dvector(1,1);
 
   loglnegHessSkewNorm(H,th,nsel,sel,n,y,ypred,x);
 
   if ((*prior)==1) {
 
-    dmomighess(Hprior,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    dmomighess(Hprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) {
       H[i][i] -= Hprior[i][i];
       for (j=1; j<i; j++) {
@@ -1186,12 +1324,12 @@ void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, 
       }
     }
 
-    dmomhess(&hprioralpha,&one,th+(*nsel)+2,&zero,taualpha);
-    H[(*nsel)+2][(*nsel)+2] -= hprioralpha;
+    dmomhess(hprioralpha,&one,th+(*nsel)+1,&zero,taualpha);
+    H[(*nsel)+2][(*nsel)+2] -= hprioralpha[1];
 
   } else if ((*prior)==2) {
 
-    dimomighess(Hprior,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    dimomighess(Hprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) {
       H[i][i] -= Hprior[i][i];
       for (j=1; j<i; j++) {
@@ -1199,12 +1337,12 @@ void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, 
       }
     }
 
-    dimomhess(&hprioralpha,&one,th+(*nsel)+2,&zero,taualpha);
-    H[(*nsel)+2][(*nsel)+2] -= hprioralpha;
+    dimomhess(hprioralpha,&one,th+(*nsel)+1,&zero,taualpha);
+    H[(*nsel)+2][(*nsel)+2] -= hprioralpha[1];
 
   } else if ((*prior)==3) {
 
-    demomighess(Hprior,&nselplus1,th+1,th+(*nsel)+1,tau,alphaphi,lambdaphi);
+    demomighess(Hprior,&nselplus1,th,th+(*nsel)+1,tau,alphaphi,lambdaphi);
     for (i=1; i<= (*nsel)+1; i++) {
       H[i][i] -= Hprior[i][i];
       for (j=1; j<i; j++) {
@@ -1212,8 +1350,8 @@ void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, 
       }
     }
 
-    demomhess(&hprioralpha,&one,th+(*nsel)+2,&zero,taualpha);
-    H[(*nsel)+2][(*nsel)+2] -= hprioralpha;
+    demomhess(hprioralpha,&one,th+(*nsel)+1,&zero,taualpha);
+    H[(*nsel)+2][(*nsel)+2] -= hprioralpha[1];
 
   } else {
 
@@ -1222,12 +1360,16 @@ void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, 
   }
 
   free_dmatrix(Hprior,1,nselplus1,1,nselplus1);
+  free_dvector(hprioralpha,1,1);
 }
 
 
 
 void loglSkewnorm(double *ans, double *ypred, double *th, int *nsel, int *sel, int *n, double *scale, double *alpha, double *y, double *x, double *XtX) {
   //Log-likelihood function of a linear model with two-piece normal errors evaluated at th=(theta,scale,alpha)
+  //Output
+  // - ans: value of the log-likelihood evaluated at th
+  // - ypred: linear predictor x %*% th
   int i;
   double w1, w2;
 
@@ -1237,7 +1379,6 @@ void loglSkewnorm(double *ans, double *ypred, double *th, int *nsel, int *sel, i
 
   if ((*nsel)>0) {
 
-    ypred= dvector(0,*n -1);
     Aselvecx(x, th+1, ypred, 0, (*n) -1, sel, nsel); //ypred= x %*% th
 
     for (i=0; i<(*n); i++) {
@@ -1245,8 +1386,6 @@ void loglSkewnorm(double *ans, double *ypred, double *th, int *nsel, int *sel, i
       if (y[i]<ypred[i]) { (*ans) -= w1 * pow(y[i]-ypred[i],2); } else { (*ans) -= w2 * pow(y[i]-ypred[i],2); }
 
     }
-
-    free_dvector(ypred,0,*n -1);
 
   } else {
 
@@ -1326,17 +1465,17 @@ void loglnegHessSkewNorm(double **H, double *th, int *nsel, int *sel, int *n, do
   //Hessian of minus the log-likelihood function of a linear model with two-piece Normal errors
   //NOTE: log.lik.hess function in R, but we need to change the sign of the output
   int i, j, k, idxi, idxj;
-  double sigma, alphat, alpha, w, w1, w2, ws1, ws2, wss1, wss2, *y0, *Wy0, *Wsy0, y0Wy0=0, y0Wsy0=0, y0Wssy0=0;
+  double sigma, alphat, alpha, w, w1, w2, ws1, ws2, wss1, wss2, *y0, *Wy0, *Wsy0, y0Wy0=0, y0Wsy0=0, y0Wssy0=0, *tX0Wy0;
 
   Wy0= dvector(0,*n -1); Wsy0= dvector(0,*n -1);
   sigma= exp(th[*nsel +1]);
   alphat= tanh(th[*nsel +2]);
   alpha= th[*nsel+2];
 
-  w1= 1.0 / (pow(1.0 + alphat,2));
-  w2= 1.0 / (pow(1.0 - alphat,2));
-  ws1= -2.0 / (pow(cosh(alpha),2) * pow(1.0+alphat,3));
-  ws2=  2.0 / (pow(cosh(alpha),2) * pow(1.0-alphat,3));
+  w1= 1.0 / (pow(1.0 + alphat,2.0));
+  w2= 1.0 / (pow(1.0 - alphat,2.0));
+  ws1= -2.0 / (pow(cosh(alpha),2.0) * pow(1.0+alphat,3.0));
+  ws2=  2.0 / (pow(cosh(alpha),2.0) * pow(1.0-alphat,3.0));
   wss1= 2.0 * exp(-2.0*alpha) + 4.0*exp(-4.0*alpha);
   wss2= 2.0 * exp(2.0*alpha) + 4.0*exp(4.0*alpha);
 
@@ -1366,26 +1505,28 @@ void loglnegHessSkewNorm(double **H, double *th, int *nsel, int *sel, int *n, do
 
     //Compute H[1:*nsel,1:*nsel] <- t(X0)%*%W%*%X0/sigma
     for (i=1; i<=(*nsel); i++) {
-      idxi= (*n)*i;
+      idxi= (*n)*sel[i-1];
       for (j=i; j<=(*nsel); j++) {
-	idxj= (*n)*j;
+	idxj= (*n)*sel[j-1];
 	H[i][j]= 0;
 	for (k=0; k<(*n); k++) {
-	  if (y[i]<ypred[i]) { w= w1; } else { w= w2; }
+	  if (y[k]<ypred[k]) { w= w1; } else { w= w2; }
 	  H[i][j] += x[k+ idxi] * x[k +idxj] * w;  //x[k][i] * x[k][j] * w
 	}
+	H[i][j] /= sigma;
+	H[j][i]= H[i][j];
       }
-      for (j=1; j<i; j++) { H[i][j]= H[j][i]; }
     }
-    for (i=1; i<=(*nsel); i++) { for (j=1; j<=(*nsel); j++) { H[i][j]= H[i][j]/sigma; H[j][i]= H[i][j]; } }
 
     //Compute H[1:*nsel,*nsel+1] <- t(X0)%*%Wy0/sigma
-    Atselvecx(x, Wy0, (double *)H +(*nsel)*(*nsel), 0, (*n)-1, sel, nsel);
-    for (i=1; i<=(*nsel); i++) { H[i][*nsel +1]= H[i][*nsel +1]/sigma; H[*nsel +1][i]= H[i][*nsel +1]; }
+    tX0Wy0= dvector(1,*nsel);
+    Atselvecx(x, Wy0, tX0Wy0+1, 0, (*n)-1, sel, nsel);
+    for (i=1; i<=(*nsel); i++) { H[i][*nsel +1]= tX0Wy0[i]/sigma; H[*nsel +1][i]= H[i][*nsel +1]; }
 
     //Compute H[1:*nsel,*nsel+2] <- -t(X0)%*%Wsy0/sigma
-    Atselvecx(x, Wsy0, (double *)H +(*nsel)*(*nsel +1), 0, (*n)-1, sel, nsel);
-    for (i=1; i<=(*nsel); i++) { H[i][*nsel +2]= -H[i][*nsel +2]/sigma; H[*nsel +2][i]= H[i][*nsel +2]; }
+    Atselvecx(x, Wsy0, tX0Wy0+1, 0, (*n)-1, sel, nsel);
+    for (i=1; i<=(*nsel); i++) { H[i][*nsel +2]= -tX0Wy0[i]/sigma; H[*nsel +2][i]= H[i][*nsel +2]; }
+    free_dvector(tX0Wy0, 1,*nsel);
 
   } else {
 
@@ -1422,9 +1563,103 @@ void loglnegHessSkewNorm(double **H, double *th, int *nsel, int *sel, int *n, do
 }
 
 
-//TO DO: mleSkewnorm NEEDS TO BE ADAPTED FROM R CODE
-void mleSkewnorm(double *thmode, double *y, double *x, int *maxit) {
-  thmode[1]= 0.0;
+void mleSkewnorm(double *thmode, double *ypred, int *sel, int *nsel, int *n, int *p, double *y, double *x, double *XtX, double *ytX, int *maxit, bool useinit) {
+  //Find MLE for linear regression with skew-normal residuals
+  //Output: 
+  // - thmode[1..nsel+2] contains MLE for regression parameters, residual dispersion and asymmetry
+  // - ypred[0.. n-1] contains linear predictor at MLE
+  //If useinit==false thmode is initialized at least squares, else thmode is used
+  bool posdef;
+  int i, ii=1, j, k, idxi, idxj, nseluniv=1, seluniv=sel[0], maxituniv=100;
+  double *Xtwy, **XtwX, **XtwXinv, *thnew, err=1.0, s1=0, s2=0, s1pow, s2pow, w, w1, w2, *e, *epred, *thuniv, difth1;
+
+  if ((*nsel)>0) {  //There are covariates
+
+    Xtwy= dvector(1,*nsel);
+    XtwX= dmatrix(1,*nsel,1,*nsel);
+    XtwXinv= dmatrix(1,*nsel,1,*nsel);
+    thnew= dvector(1,*nsel);
+
+    if (!useinit) {
+
+      leastsquares(thmode,thmode+(*nsel)+1,ypred,y,x,XtX,ytX,n,p,sel,nsel);
+
+      //Refine estimate for intercept (assumed to be sel[0]) via several univariate updates
+      e= dvector(0,*n -1); epred= dvector(0,*n -1); thuniv= dvector(1,3);
+      idxj= (*n)*sel[0];
+      for (i=0; i< (*n); i++) { epred[i]= thmode[1]*x[i +idxj]; e[i]= y[i] - ypred[i] + epred[i]; }
+      thuniv[1]= thmode[1]; thuniv[2]= thmode[*nsel +1]; thuniv[3]= thmode[*nsel +2];
+      mleSkewnorm(thuniv,epred,&seluniv,&nseluniv,n,p,e,x,XtX,ytX,&maxituniv,true);
+      difth1= thuniv[1]-thmode[1];
+      thmode[1]= thuniv[1]; thmode[*nsel +1]= thuniv[2]; thmode[*nsel +2]= thuniv[3];
+      for (i=0; i< (*n); i++) { ypred[i]+= difth1*x[i +idxj]; }  //update linear predictor
+      if ((*nsel)==1) { err= -1; } //only 1 covariate, we're done
+      free_dvector(e, 0,*n -1); free_dvector(epred, 0,*n -1); free_dvector(thuniv,1,3);
+    }
+
+    while ((err>0.0001) && (ii<(*maxit))) {
+
+      for (i=0, s1=0, s2=0; i< *n; i++) { if (y[i]<=ypred[i]) { s1 += pow(y[i]-ypred[i],2.0); } else { s2 += pow(y[i]-ypred[i],2.0); } }
+
+      s1pow= pow(s1,1.0/3.0); s2pow= pow(s2,1.0/3.0);
+      thmode[*nsel +2]= (s1pow-s2pow)/(s1pow+s2pow); //alpha
+
+      w1= 1.0/pow(1.0+thmode[*nsel +2],2.0); w2= 1.0/pow(1.0-thmode[*nsel +2],2.0);
+
+      //Compute t(X) %*% W %*% y, t(X) %*% W %*% X
+      for (i=1; i<=(*nsel); i++) {
+        idxi= (*n)*sel[i-1];
+	//Find t(X) %*% W %*% y
+	Xtwy[i]= 0;
+	for (k=0; k<(*n); k++) {
+	  if (y[k]<ypred[k]) { w= w1; } else { w= w2; }
+          Xtwy[i] += x[k+ idxi] * y[k] * w;  //x[k][i] * y[k] * w
+	}
+	//Find t(X) %*% W %*% X
+        for (j=i; j<=(*nsel); j++) {
+	  idxj= (*n)*sel[j-1];
+	  XtwX[i][j]= 0;
+	  for (k=0; k<(*n); k++) {
+	    if (y[k]<ypred[k]) { w= w1; } else { w= w2; }
+	    XtwX[i][j] += x[k+ idxi] * x[k +idxj] * w;  //x[k][i] * x[k][j] * w
+	  }
+        }
+        for (j=1; j<i; j++) { XtwX[i][j]= XtwX[j][i]; }
+      }
+
+      inv_posdef(XtwX, *nsel, XtwXinv, &posdef);
+      Ax(XtwXinv, Xtwy,thnew,1,*nsel,1,*nsel);  //thmode[1..nsel]= (t(X) * W * X)^{-1} t(X) * W * y
+
+      err= fabs(thnew[1]-thmode[1]);
+      thmode[1]= thnew[1];
+      for (j=2; j<= (*nsel); j++) { 
+	err= max_xy(err,fabs(thnew[j]-thmode[j]));
+	thmode[j]= thnew[j];
+      }
+      ii++;
+      if ((err>0.0001) && (ii<(*maxit))) {
+        Aselvecx(x, thmode+1, ypred, 0, (*n) -1, sel, nsel);
+      }
+    }
+
+    free_dvector(Xtwy,1,*nsel);
+    free_dmatrix(XtwX,1,*nsel,1,*nsel);
+    free_dmatrix(XtwXinv,1,*nsel,1,*nsel);
+    free_dvector(thnew,1,*nsel);
+
+  } else {  //No covariates
+
+    for (i=0; i< *n; i++) { 
+      if (y[i]<=0) { s1 += pow(y[i],2.0); } else { s2 += pow(y[i],2.0); }
+    }
+
+    s1pow= pow(s1,1.0/3.0); s2pow= pow(s2,1.0/3.0);
+    thmode[*nsel +2]= (s1pow-s2pow)/(s1pow+s2pow); //alpha
+
+  }
+
+  if (err>=0) thmode[(*nsel)+1]= (0.25/((*n)+.0)) * pow(s1pow + s2pow, 3);  //MLE for residual dispersion
+
 }
 
 
@@ -1799,6 +2034,7 @@ void imomModeK(double *th, PolynomialRootFinder::RootStatus_T *status, double *X
 
 
 void imomIntegralApproxC(double *ILaplace, double *thopt, double **Voptinv, double *fopt, int *sel, int *nsel, int *n, int *p, double *XtX, double *ytX, double *phi, double *tau, int *logscale, int *hessian) {
+  bool posdef;
   int iter, maxit=100, emptyint;
   double **V, **Vinv, ftol= 1.0e-5, **dirth, **Vopt, detVopt, emptydouble=0, **emptymatrix;
   PolynomialRootFinder::RootStatus_T status;
@@ -1807,7 +2043,7 @@ void imomIntegralApproxC(double *ILaplace, double *thopt, double **Voptinv, doub
   emptymatrix= dmatrix(1,1,1,1);
   //Initialize
   addct2XtX(tau,XtX,sel,nsel,p,V); //add tau to XtX diagonal, store in V
-  inv_posdef_upper(V,*nsel,Vinv);
+  inv_posdef_upper(V,*nsel,Vinv,&posdef);
   Asym_xsel(Vinv,*nsel,ytX,sel,thopt);  //product Vinv * selected elements in ytX
   //Minimization
   imomModeK(thopt,&status,XtX,ytX,phi,tau,sel,nsel,p);
@@ -2140,6 +2376,7 @@ SEXP pimomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssum
 
 
 double pimomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
+  bool posdef;
   int i, j, zero=0, one=1, *inputlog, hessian;
   double ans=0, er, sumer2, **V, **Vinv, *thest, ypred, phiest, intmc, intlapl, *inputphi, num, den, term1, alphahalf=.5*(*(*pars).alpha);
 
@@ -2155,7 +2392,7 @@ double pimomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
     thest= dvector(1,*nsel+1);
 
     addct2XtX((*pars).tau,(*pars).XtX,sel,nsel,(*pars).p,V); //add tau to diagonal elem of XtX
-    inv_posdef_upper(V,*nsel,Vinv);
+    inv_posdef_upper(V,*nsel,Vinv,&posdef);
     Asym_xsel(Vinv,*nsel,(*pars).ytX,sel,thest);
     for (i=0, sumer2=0; i<(*(*pars).n); i++) {
       for (j=1, ypred=0; j<=(*nsel); j++) { ypred += (*pars).x[i + (*(*pars).n)*sel[j-1]] * thest[j]; }
