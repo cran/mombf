@@ -19,7 +19,6 @@ modselIntegrals::modselIntegrals(pt2margFun marfun, pt2margFun priorfun, int nva
 modselIntegrals::~modselIntegrals() {
 
   free((char  *) this->zerochar);
-  //free_charvector(this->zerochar, 0, maxVars-1);
 
 }
 
@@ -41,7 +40,8 @@ double modselIntegrals::getJoint(int *sel, int *nsel, struct marginalPars *pars)
   if (logjointSaved.count(s) > 0) { 
     ans= logjointSaved[s];
   } else {
-    ans= marginalFunction(sel,nsel,pars) + priorFunction(sel,nsel,pars);
+    ans= marginalFunction(sel,nsel,pars);
+    ans+= priorFunction(sel,nsel,pars);
     double d= maxIntegral - ans;
     if (d<10 || maxVars<=16) logjointSaved[s]= ans;
     if (d<0) {

@@ -4,23 +4,29 @@
 \title{ Bayesian variable selection for linear models via non-local priors. }
 \description{
   Bayesian model selection for linear models using
-  non-local priors. The
-  algorithm uses a Gibbs scheme and can handle p>>n cases.
+  non-local priors. Model enumeration is used when feasible,
+  else a Gibbs scheme that can handle p>>n is adopted.
   See \code{rnlp} to obtain posterior samples for the coefficients.
 }
 \usage{
-modelSelection(y, x, center=TRUE, scale=TRUE, niter=10^4, thinning=1,
+modelSelection(y, x, center=TRUE, scale=TRUE,
+enumerate= ifelse(ncol(x)<15,TRUE,FALSE), maxvars= ncol(x),
+niter=10^4, thinning=1,
 burnin=round(niter/10), family='normal', priorCoef=momprior(tau=0.348),
 priorDelta=modelbbprior(alpha.p=1,beta.p=1),
 priorVar=igprior(alpha=.01,lambda=.01),
 priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)),
-initSearch='greedy', method='auto', optimMethod='LMA', B=10^5, verbose=TRUE)
+initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA',
+B=10^5, verbose=TRUE)
 }
 \arguments{
 \item{y}{Vector with observed responses}
 \item{x}{Design matrix with all potential predictors}
-\item{center}{If \code{center==TRUE}, \code{y} and \code{x} are centered to have zero mean, therefore eliminating the need to include an intercept term in x}
-\item{scale}{If \code{scale==TRUE}, \code{y} and columns in \code{x} are scaled to have standard deviation 1}
+\item{center}{If \code{TRUE}, \code{y} and \code{x} are centered to have zero mean, therefore eliminating the need to include an intercept term in x}
+\item{scale}{If \code{TRUE}, \code{y} and columns in \code{x} are
+  scaled to have standard deviation1}
+\item{enumerate}{If \code{TRUE} all models with up to \code{maxvars} are enumerated, else Gibbs sampling is used to explore the model space}
+\item{maxvars}{Maximum number of variables in a model (ignored if \code{enumerate==FALSE})}
 \item{niter}{Number of Gibbs sampling iterations}
 \item{thinning}{MCMC thinning factor, i.e. only one out of each \code{thinning} iterations are reported. Defaults to thinning=1, i.e. no thinning}
 \item{burnin}{Number of burn-in MCMC iterations. Defaults to
@@ -28,11 +34,15 @@ initSearch='greedy', method='auto', optimMethod='LMA', B=10^5, verbose=TRUE)
 \item{family}{Residual distribution. Possible values are
   'normal','twopiecenormal','laplace', 'twopiecelaplace', or 'auto'. For
   the latter the residual distribution is inferred from the data.}
-\item{priorCoef}{Prior distribution for the coefficients. Object created
-  with \code{momprior}, \code{imomprior}, \code{emomprior} or \code{zellnerprior}.}
+\item{priorCoef}{Prior on coefficients, created
+  by \code{momprior}, \code{imomprior}, \code{emomprior} or
+  \code{zellnerprior}.
+  Prior dispersion is on coefficients/sqrt(scale) for Normal and
+  two-piece Normal, and on coefficients/sqrt(2*scale) for Laplace
+  and two-piece Laplace.}
 \item{priorDelta}{Prior on model space. Use \code{modelbbprior()} for Beta-Binomial prior, \code{modelbinomprior(p)} for Binomial prior with prior inclusion probability \code{p}, or \code{modelunifprior()} for Uniform prior}
-\item{priorVar}{Inverse gamma prior on residual variance, created with
-  \code{igprior()}}
+\item{priorVar}{Inverse gamma prior on scale parameter, created by
+  \code{igprior(). For Normal variance=scale, for Laplace variance=2*scale.}}
 \item{priorSkew}{prior on residual skewness parameter, assumed to be of
   the same family as priorCoef. Ignored if \code{family} is 'normal' or 'laplace'.}
 \item{phi}{Residual variance. Typically this is unknown and therefore left missing. If specified argument priorVar is ignored}
@@ -45,7 +55,13 @@ initSearch='greedy', method='auto', optimMethod='LMA', B=10^5, verbose=TRUE)
   for BIC-type approximation,
   \code{method=='MC'} for Importance Sampling, \code{method=='Hybrid'}
   for Hybrid Laplace-IS (only available for piMOM prior). See Details.}
-\item{optimMethod}{Algorithm to maximize objective function when method=='Laplace' or method=='MC'. Only used for family=='twopiecenormal'. optimMethod=='LMA' uses modified Newton-Raphson algorithm, 'CDA' coordinate descent algorithm}
+\item{hess}{Method to estimat the hessian in the Laplace approximation to the integrated
+  likelihood under Laplace or asymmetric Laplace errors. When
+  hess=='asymp' the asymptotic hessian is used, hess=='asympDiagAdj' a
+  diagonal adjustment is applied (see Rossell and Rubio for details).}
+\item{optimMethod}{Algorithm to maximize objective function when
+  method=='Laplace' or method=='MC'. optimMethod=='LMA' uses modified
+  Newton-Raphson algorithm, 'CDA' coordinate descent algorithm}
 \item{B}{Number of samples to use in Importance Sampling scheme. Ignored if \code{method=='Laplace'}}
 \item{verbose}{Set \code{verbose==TRUE} to print iteration progress}
 }
@@ -104,17 +120,22 @@ Object of class \code{msfit}, which extends a list with elements
   Johnson V.E., Rossell D. Non-Local Prior Densities for Default
   Bayesian Hypothesis Tests. Journal of the Royal Statistical Society B,
   2010, 72, 143-170.
+  
   Johnson V.E., Rossell D. Bayesian model selection in high-dimensional
-  settings. Journal of the American Statistical Association, 2012, 107, 649-660.
+  settings. Journal of the American Statistical Association, 2012, 107,
+  649-660.
+
+  Rossell D., Rubio F.J. Tractable Bayesian variable selection: beyond
+  normal errors. 2016
 }
 \author{ David Rossell }
 \seealso{
- See \code{\link{msfit-class}} for details on the output, postProb to
- extract posterior model probabilities.
- See \code{\link{rnlp}} to obtain posterior samples for the coefficients.
- To compute marginal densities for a given model see
-  \code{\link{pmomMarginalK}}, \code{\link{pmomMarginalU}},
-  \code{\link{pimomMarginalK}}, \code{\link{pimomMarginalU}}.
+  \code{\link{msfit-class}} for details on the output.
+  \code{\link{postProb}} to obtain posterior model probabilities.
+ \code{\link{rnlp}} to obtain posterior samples for the coefficients.
+ \code{\link{nlpMarginal}} to compute marginal densities for a given model.
+  
+
 }
 \examples{
 #Simulate data

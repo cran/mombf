@@ -19,6 +19,7 @@ struct marginalPars {
   double *m;  //Sinv * Xty   (needed by mom and emom)
   double **S;  //XtX + I/tau  (needed by mom and emom)
   int *method; //method==0 for Laplace; method==1 for Monte Carlo; method==2 for plug-in (method== -1 for exact, when available)
+  int *hesstype; //for asymmetric Laplace residuals hess=1 means using asymptotic hessian, hess=2 means using diagonal adjustment to asymp hessian
   int *optimMethod; //optimization method to find mode
   int *B;      //number of Monte Carlo samples
   double *alpha;    //prior for residual variance is IG(.5*alpha,.5*lambda)
@@ -70,7 +71,7 @@ typedef double(*pt2modavgPrior)(int *, int *, struct modavgPars *);  //pointer t
 //*************************************************************************************
 
 pt2margFun set_marginalFunction(int *prCoef, int *knownphi, int *family);
-pt2margFun set_priorFunction(int *prDelta);
+pt2margFun set_priorFunction(int *prDelta, int *family);
 pt2modavgPrior set_priorFunction_modavg(int *priorModel);
 
 //*************************************************************************************
@@ -106,7 +107,7 @@ double simTaupmom(int *nsel, int *curModel, double *curCoef1, double *curPhi, st
 //General marginal density calculation routines
 //*************************************************************************************
 
-void set_marginalPars(struct marginalPars *pars, int *n,int *p,double *y,double *sumy2,double *x,double *XtX,double *ytX,int *method,int *optimMethod,int *B,double *alpha,double *lambda,double *phi, double *tau, double *taualpha, int *r, double *prDeltap, double *parprDeltap, int *logscale);
+void set_marginalPars(struct marginalPars *pars, int *n,int *p,double *y,double *sumy2,double *x,double *XtX,double *ytX,int *method,int *hess,int *optimMethod,int *B,double *alpha,double *lambda,double *phi, double *tau, double *taualpha, int *r, double *prDeltap, double *parprDeltap, int *logscale);
 void set_f2opt_pars(double *m, double **S, double *sumy2, double *XtX, double *ytX, double *alpha, double *lambda, double *phi, double *tau, int *r, int *n, int *p, int *sel, int *nsel);
 void set_f2int_pars(double *XtX, double *ytX, double *tau, int *n, int *p, int *sel, int *nsel, double *y, double *sumy2, int *method, int *B, double *alpha, double *lambda, int *logscale);
 
@@ -116,16 +117,20 @@ void set_f2int_pars(double *XtX, double *ytX, double *tau, int *n, int *p, int *
 // Model Selection Routines
 //*************************************************************************************
 
-void modelSelectionGibbs(int *postSample, double *postOther, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *family, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
-void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *family, int *prCoef, int *prDelta, int *niter, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
+void modelSelectionEnum(int *postMode, double *postModeProb, double *postProb, int *nmodels, int *models, int *knownphi, int *family, int *prCoef, int *prDelta, int *verbose, struct marginalPars *pars);
+void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *family, int *prCoef, int *prDelta, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
+void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *prCoef, int *prDelta, int *niter, int *ndeltaini, int *deltaini, int *verbose, struct marginalPars *pars);
 void sel2selnew(int newelem, int *sel, int *nsel, int *selnew, int *nselnew, bool copylast);
 
 // Priors on Model Space (always return on log scale)
 double unifPrior(int *sel, int *nsel, struct marginalPars *pars);
+double unifPriorTP(int *sel, int *nsel, struct marginalPars *pars);
 double unifPrior_modavg(int *sel, int *nsel, struct modavgPars *pars);
 double binomPrior(int *sel, int *nsel, struct marginalPars *pars);
+double binomPriorTP(int *sel, int *nsel, struct marginalPars *pars);
 double binomPrior_modavg(int *sel, int *nsel, struct modavgPars *pars);
 double betabinPrior(int *sel, int *nsel, struct marginalPars *pars);
+double betabinPriorTP(int *sel, int *nsel, struct marginalPars *pars);
 double betabinPrior_modavg(int *sel, int *nsel, struct modavgPars *pars);
 
 
@@ -146,6 +151,31 @@ double pimomMargTP(int *sel, int *nsel, struct marginalPars *pars);
 double pemomMargTP(int *sel, int *nsel, struct marginalPars *pars);
 
 
+//*************************************************************************************
+// TWO-PIECE LAPLACE ROUTINES
+//*************************************************************************************
+
+double pmomMargLaplU(int *sel, int *nsel, struct marginalPars *pars);
+double pimomMargLaplU(int *sel, int *nsel, struct marginalPars *pars);
+double pemomMargLaplU(int *sel, int *nsel, struct marginalPars *pars);
+double pmomMargAlaplU(int *sel, int *nsel, struct marginalPars *pars);
+double pimomMargAlaplU(int *sel, int *nsel, struct marginalPars *pars);
+double pemomMargAlaplU(int *sel, int *nsel, struct marginalPars *pars);
+double nlpMargAlapl(int *sel, int *nsel, struct marginalPars *pars, int *prior, int *symmetric);
+
+void postmodeAlaplCDA(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, int *pvar, double *y, double *x, double *XtX, double *ytX, int *maxit, double *ftol, double *thtol, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *hesstype, int *symmetric);
+void mleAlaplCDA(double *thmode, double *fmode, double *ypred, int *sel, int *nsel, int *n, int *p, double *y, double *x, double *XtX, double *ytX, int *maxit, bool useinit, int *symmetric);
+
+void fnegAlapl(double *ans, double *ypred, double *th, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, bool logscale, int *symmetric);
+void fpnegAlaplUniv(int j, double *g, double *H, double *th, double *ypred, int *sel, int *nsel, int *n, int *p, double *y, double *x, double *XtX, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmetric);
+void fppnegAlapl(double **H, double *th, double *ypred, int *sel, int *nsel, int *n, int *p, double *y, double *x, double *XtX, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmetric, int *hesstype);
+
+void loglAlapl(double *ans, double *ypred, double *th, int *nsel, int *sel, int *n, double *scale, double *alpha, double *y, double *x, int *symmetric);
+void loglnegGradHessAlaplUniv(int j, double *g, double *H, double *th, int *nsel, int *sel, int *n, int *p, double *y, double *ypred, double *x, double *XtX, int *symmetric);
+void loglnegHessAlapl(double **H, double *th, int *nsel, int *sel, int *n, int *p, double *y, double *ypred, double *x, double *XtX, int *symmetric, int *hesstype);
+void quadapproxALaplace(double *hdiag, double **H, int *nsel, int *sel, int *n, double *y0, double *x, double *th, double *vartheta, double *alpha, double *wy0, int *symmetric, double *w1, double *w2);
+
+
 
 //*************************************************************************************
 // TWO-PIECE NORMAL ROUTINES
@@ -154,23 +184,22 @@ double pemomMargTP(int *sel, int *nsel, struct marginalPars *pars);
 double pmomMargSkewNormU(int *sel, int *nsel, struct marginalPars *pars);
 double pimomMargSkewNormU(int *sel, int *nsel, struct marginalPars *pars);
 double pemomMargSkewNormU(int *sel, int *nsel, struct marginalPars *pars);
-double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prior);
+double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prior, int *symmetric);
 
 void postmodeSkewNorm(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, int *pvar, double *y, double *x, double *XtX, double *ytX, int *maxit, double *tau, double *taualpha, double *alpha, double *lambda, bool *initmle, int *prior);
-void postmodeSkewNormCDA(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, int *pvar, double *y, double *x, double *XtX, double *ytX, int *maxit, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior);
+void postmodeSkewNormCDA(double *thmode, double *fmode, double **hess, int *sel, int *nsel, int *n, int *pvar, double *y, double *x, double *XtX, double *ytX, int *maxit, double *ftol, double *thtol, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmetric);
 
-void fnegSkewnorm(double *ans, double *ypred, double *th, int *sel, int *nsel, int *n, double *y, double *x, double *XtX, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, bool logscale);
+void fnegSkewnorm(double *ans, double *ypred, double *th, int *sel, int *nsel, int *n, double *y, double *x, double *XtX, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, bool logscale, int *symmetric);
 void fpnegSkewnorm(double *g, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior);
-void fpnegSkewnormUniv(int j, double *g, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior);
-void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior);
-void fppnegSkewnormUniv(int j, double *H, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior);
-
+void fpnegSkewnormUniv(int j, double *g, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmtric);
+void fppnegSkewnorm(double **H, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmetric);
+void fppnegSkewnormUniv(int j, double *H, double *th, double *ypred, int *sel, int *nsel, int *n, double *y, double *x, double *tau, double *taualpha, double *alphaphi, double *lambdaphi, int *prior, int *symmetric);
 
 void loglSkewnorm(double *ans, double *ypred, double *th, int *nsel, int *sel, int *n, double *scale, double *alpha, double *y, double *x, double *XtX);
 void loglnegGradSkewNorm(double *g, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x);
-void loglnegGradSkewNormUniv(int j, double *g, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x);
-void loglnegHessSkewNorm(double **H, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x);
-void loglnegHessSkewNormUniv(int jj, double *H, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x);
+void loglnegGradSkewNormUniv(int j, double *g, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x, int *symmetric);
+void loglnegHessSkewNorm(double **H, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x, int *symmetric);
+void loglnegHessSkewNormUniv(int jj, double *H, double *th, int *nsel, int *sel, int *n, double *y, double *ypred, double *x, int *symmetric);
 
 void mleSkewnorm(double *thmode, double *ypred, int *sel, int *nsel, int *n, int *p, double *y, double *x, double *XtX, double *ytX, int *maxit, bool useinit);
 
