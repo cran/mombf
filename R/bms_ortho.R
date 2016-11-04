@@ -256,6 +256,7 @@ postModeBlockDiag <- function(y, x, blocks, priorCoef=zellnerprior(tau=nrow(x)),
     varidx <- lapply(as.integer(names(blocksize)), function(k) nn[blocks==k])
     if (priorDelta@priorDistr=='binomial' & ('p' %in% names(priorDelta@priorPars))) {
         rho <- priorDelta@priorPars['p']
+        if (rho<0 | rho>1) stop("Specified prior inclusion probability outside [0,1]. Check priorDelta")
         priorModel <- function(nvar) nvar*log(rho) + (p-nvar)*log(1-rho)
         priorModelBlock <- function(nvar,blocksize) nvar*log(rho) + (blocksize-nvar)*log(1-rho)
     } else if (priorDelta@priorDistr=='binomial' & !('p' %in% names(priorDelta@priorPars))) {
@@ -288,19 +289,8 @@ postModeBlockDiag <- function(y, x, blocks, priorCoef=zellnerprior(tau=nrow(x)),
     Xty <- t(x) %*% matrix(y,ncol=1)
     XtX <- lapply(1:nblocks,function(i) { sel <- which(blocks==i); t(x[,sel]) %*% x[,sel] })
     #Compute u-scores, least squares estimates and covariances within blocks
-    u <- umv <- ubest <- vector("list",nblocks)
-    for (i in 1:nblocks) {
-        Xtyblock <- Xty[blocks==i]
-        modelsblock <- expand.grid(lapply(1:blocksize[i], function(z) c(FALSE,TRUE)))
-        umv[[i]] <- apply(modelsblock[-1,,drop=FALSE], 1, function(sel) uscore(y,XtX[[i]][sel,sel],Xtyblock[sel]))
-        ublock <- c(0,sapply(umv[[i]],'[[',1)) #null model has u-score=0
-        nvarsblock <- rowSums(modelsblock)
-        o <- order(nvarsblock,ublock,decreasing=c(TRUE,FALSE))
-        modelid <- apply(modelsblock,1,function(z) paste(which(z),collapse=','))
-        u[[i]] <- data.frame(modelid=modelid[o],u=ublock[o],nvars=nvarsblock[o],stringsAsFactors=FALSE)
-        names(umv[[i]]) <- modelid[-1]
-        ubest[[i]] <- do.call(rbind,by(u[[i]], INDICES=u[[i]][,'nvars'], FUN=function(z) z[1,]))[-1,] #best model of each size
-    }
+    ubyblocks <- blockuscores(blocks, blocksize=blocksize, y=y, Xty=Xty, XtX=XtX)
+    u <- ubyblocks$u; umv <- ubyblocks$umv; ubest <- ubyblocks$ubest
     #Avoid overflow in cases where X'X not exactly block-diagonal
     sumumax <- sum(sapply(u, function(z) z$u[1]))
     if (sumumax > (sumy2-l.phi)) {
@@ -472,6 +462,24 @@ postModeBlockDiag <- function(y, x, blocks, priorCoef=zellnerprior(tau=nrow(x)),
 }
 
 
+blockuscores <- function(blocks, blocksize, y, Xty, XtX) {
+    u <- umv <- ubest <- vector("list",length(blocksize))
+    for (i in 1:length(u)) {
+        Xtyblock <- Xty[blocks==i]
+        modelsblock <- expand.grid(lapply(1:blocksize[i], function(z) c(FALSE,TRUE)))
+        umv[[i]] <- apply(modelsblock[-1,,drop=FALSE], 1, function(sel) uscore(y,XtX[[i]][sel,sel],Xtyblock[sel]))
+        ublock <- c(0,sapply(umv[[i]],'[[',1)) #null model has u-score=0
+        nvarsblock <- rowSums(modelsblock)
+        o <- order(nvarsblock,ublock,decreasing=c(TRUE,FALSE))
+        modelid <- apply(modelsblock,1,function(z) paste(which(z),collapse=','))
+        u[[i]] <- data.frame(modelid=modelid[o],u=ublock[o],nvars=nvarsblock[o],stringsAsFactors=FALSE)
+        names(umv[[i]]) <- modelid[-1]
+        ubest[[i]] <- do.call(rbind,by(u[[i]], INDICES=u[[i]][,'nvars'], FUN=function(z) z[1,]))[-1,] #best model of each size
+    }
+    return(list(u=u,umv=umv,ubest=ubest))
+}
+
+
 coolblock <- function(ubest, g, priorModelBlock, varidx, maxvars) {
     #Coolblock algorithm. Returns sequence of models with highest post prob under Zellner's prior conditional on any value for phi (residual variance)
     #Input
@@ -496,7 +504,6 @@ coolblock <- function(ubest, g, priorModelBlock, varidx, maxvars) {
     #Store prior odds. The code takes advantage that for uniform/binom the odds don't depend on the block size
     #priorodds[[l]][j] has prior odds of l vars vs j vars
     priorodds <- lapply(1:max(nvars), function(l) { priorModelBlock(l,blocksize=max(nvars)) - sapply(0:(l-1), function(j) priorModelBlock(j,blocksize=max(nvars))) })
-    #
     #Step 1. Within-blocks optimal configuration
     #
     phiseq <- r <- m <- vector("list",K)
@@ -504,7 +511,8 @@ coolblock <- function(ubest, g, priorModelBlock, varidx, maxvars) {
         #Obtain all pairwise r scores
         r[[k]] <- matrix(NA,nrow=nvars[k]+1,ncol=nvars[k]+1)
         rownames(r[[k]]) <- colnames(r[[k]]) <- 0:nvars[k]
-        r[[k]][-1,1] <- r[[k]][1,-1] <- shrinkage * ubest[[k]][,'u'] / (ubest[[k]]$nvars * log1g - 2 * sapply(priorodds,'[[',1))
+        r[[k]][-1,1] <- r[[k]][1,-1] <- shrinkage * ubest[[k]][,'u'] / (ubest[[k]]$nvars * log1g - 2 * sapply(priorodds[ubest[[k]]$nvars],'[[',1))
+        #r[[k]][-1,1] <- r[[k]][1,-1] <- shrinkage * ubest[[k]][,'u'] / (ubest[[k]]$nvars * log1g - 2 * priorodds[[nvars[k]]][ubest[[k]]$nvars])
         if (nvars[k]>=2) {
           for (l in 2:nvars[k]) {
               for (j in 1:(l-1)) {
@@ -577,7 +585,8 @@ coolblock <- function(ubest, g, priorModelBlock, varidx, maxvars) {
         ans$modelid[1] <- ans$m[1] <- varidx[[onevar$block[sel]]][as.integer(onevar$modelid[sel])]
     }
     if (is.na(ans$u[2])) {
-        sel1 <- which(order(onevar$u,decreasing=TRUE) %in% c(1,2))
+        sel1 <- ((1:nrow(onevar))[order(onevar$u,decreasing=TRUE)])
+        sel1 <- sel1[1:min(2,length(sel1))]
         u1 <- sum(onevar$u[sel1])
         if (any(nvars>1)) {
             twovar <- data.frame(block=1:length(ubest),do.call(rbind,lapply(ubest,function(z) z[2,])), stringAsFactors=FALSE)
@@ -586,12 +595,14 @@ coolblock <- function(ubest, g, priorModelBlock, varidx, maxvars) {
         }
         if (all(nvars==1) | u1>u2) {
             ans$u[2] <- u1
-            ans$block[2] <- onevar$block[sel1]
-            ans$modelid[1] <- paste(varidx[[onevar$block[sel1[1]]]][as.integer(onevar$modelid[sel1[1]])],varidx[[onevar$block[sel1[2]]]][as.integer(onevar$modelid[sel1[2]])],sep=',')
+            ans$block[2] <- onevar$block[sel1][2]
+            ans$modelid[2] <- paste(varidx[[onevar$block[sel1[1]]]][as.integer(onevar$modelid[sel1[1]])],varidx[[onevar$block[sel1[2]]]][as.integer(onevar$modelid[sel1[2]])],sep=',')
+            ans$m[2] <- onevar$modelid[sel1[2]]
         } else {
             ans$u[2] <- u2
-            ans$block[2] <- twovar$block[sel]
-            ans$modelid[2] <- ans$m[2] <- varidx[[twovar$block[sel]]][as.integer(strsplit(twovar$modelid[sel],split=',')[[1]])]
+            ans$block[2] <- twovar$block[sel2]
+            ans$modelid[2] <- paste(varidx[[twovar$block[sel2]]][as.integer(strsplit(twovar$modelid[sel2],split=',')[[1]])],collapse=',')
+            ans$m[2] <- twovar$modelid[sel2]
         }
     }
     #

@@ -197,7 +197,7 @@ void set_modavgPars(struct modavgPars *pars, int *n, int *p1, int *p2, int *isbi
 SEXP pmomLM_I(SEXP niter, SEXP thinning, SEXP burnin, SEXP niniModel, SEXP iniModel, SEXP iniCoef1, SEXP iniCoef2, SEXP iniPhi, SEXP iniOthers, SEXP verbose, SEXP n, SEXP p1, SEXP p2, SEXP isbinary, SEXP ybinary, SEXP y, SEXP sumy2, SEXP x1, SEXP x2, SEXP XtX, SEXP ytX, SEXP cholS2, SEXP S2inv, SEXP cholS2inv, SEXP colsumx1sq, SEXP alpha, SEXP lambda, SEXP priorCoef, SEXP r, SEXP tau1, SEXP tau2, SEXP priorTau1, SEXP atau1, SEXP btau1, SEXP priorModel, SEXP prModelpar) {
   struct modavgPars pars;
   int mcmc2save, *postModel;
-  double *margpp, *postCoef1, *postCoef2, *postPhi, *postOther;
+  double *margpp, *postCoef1, *postCoef2, *postPhi, *postOther, tau1copy= REAL(tau1)[0];
   SEXP ans;
 
   PROTECT(ans= allocVector(VECSXP, 7));
@@ -225,7 +225,7 @@ SEXP pmomLM_I(SEXP niter, SEXP thinning, SEXP burnin, SEXP niniModel, SEXP iniMo
   }
   postOther= REAL(VECTOR_ELT(ans,5));
 
-  set_modavgPars(&pars,INTEGER(n),INTEGER(p1),INTEGER(p2),INTEGER(isbinary),INTEGER(ybinary),REAL(y),REAL(sumy2),REAL(x1),REAL(x2),REAL(XtX),REAL(ytX),REAL(cholS2),REAL(S2inv),REAL(cholS2inv),REAL(colsumx1sq),REAL(alpha),REAL(lambda),INTEGER(priorCoef),INTEGER(r),REAL(tau1),REAL(tau2),INTEGER(priorTau1),REAL(atau1),REAL(btau1),INTEGER(priorModel),REAL(prModelpar));
+  set_modavgPars(&pars,INTEGER(n),INTEGER(p1),INTEGER(p2),INTEGER(isbinary),INTEGER(ybinary),REAL(y),REAL(sumy2),REAL(x1),REAL(x2),REAL(XtX),REAL(ytX),REAL(cholS2),REAL(S2inv),REAL(cholS2inv),REAL(colsumx1sq),REAL(alpha),REAL(lambda),INTEGER(priorCoef),INTEGER(r),&tau1copy,REAL(tau2),INTEGER(priorTau1),REAL(atau1),REAL(btau1),INTEGER(priorModel),REAL(prModelpar));
   pmomLM(postModel, margpp, postCoef1, postCoef2, postPhi, postOther, &pars, INTEGER(niter), INTEGER(thinning), INTEGER(burnin), INTEGER(niniModel), INTEGER(iniModel), REAL(iniCoef1), REAL(iniCoef2), REAL(iniPhi), REAL(iniOthers), INTEGER(verbose));
 
   UNPROTECT(1);
@@ -707,7 +707,7 @@ void modelSelectionEnum(int *postMode, double *postModeProb, double *postProb, i
 
   //Store posterior mode
   for (j=0; j< *(*pars).p; j++) { postMode[j]= models[(*nmodels)*j + postModeidx]; }
-  if ((*family)==0) { 
+  if ((*family)==0) {
     for (j= *(*pars).p; j< (*(*pars).p)+2; j++) { postMode[j]= models[(*nmodels)*j + postModeidx]; }
   }
 
@@ -820,11 +820,11 @@ void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double 
     currentJ= integrals->getJoint(sel,&nsel,pars);
   }
   postProb[0]= *postModeProb= currentJ;
-  if (*burnin >0) { 
-    ilow=-(*burnin); savecnt=0; iupper= *niter - *burnin +1; 
-  } else { 
+  if (*burnin >0) {
+    ilow=-(*burnin); savecnt=0; iupper= *niter - *burnin +1;
+  } else {
     for (j=0; j<nsel; j++) { postSample[sel[j]*niterthin]= 1; }
-    ilow=1; savecnt=1; iupper= *niter; 
+    ilow=1; savecnt=1; iupper= *niter;
   } //if no burnin, start at i==1 & save initial value
 
   //Iterate
@@ -844,7 +844,7 @@ void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double 
           for (k=0; k< nselnew; k++) { postMode[selnew[k]]= 1; }
 	  if ((*family)==0) {
 	    if (selnew[nselnew]== (*(*pars).p)) { //Normal residuals
-	      postMode[*(*pars).p]= 0; 
+	      postMode[*(*pars).p]= 0;
 	      postMode[(*(*pars).p) +1]= 0;
 	    } else if (selnew[nselnew]== (*(*pars).p) +1) { //Asymmetric Normal residuals
 	      postMode[*(*pars).p]= 1;
@@ -917,8 +917,8 @@ void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double 
     if ((*verbose==1) && ((i%niter10)==0)) { Rprintf("."); }
   }
   if (iupper>ilow) { for (j=0; j< (*(*pars).p); j++) { margpp[j] /= (iupper-imax_xy(0,ilow)+.0); } } //from sum to average
-  if (*family ==0) { 
-    margpp[(*(*pars).p)] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+1] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+2] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+3] /= (iupper-imax_xy(0,ilow)+.0); 
+  if (*family ==0) {
+    margpp[(*(*pars).p)] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+1] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+2] /= (iupper-imax_xy(0,ilow)+.0); margpp[(*(*pars).p)+3] /= (iupper-imax_xy(0,ilow)+.0);
   }
   if (*verbose==1) Rprintf(" Done.\n");
 
@@ -1323,7 +1323,7 @@ double nlpMargAlapl(int *sel, int *nsel, struct marginalPars *pars, int *prior, 
 
     thsim= dvector(1, p); cholV= dmatrix(1,p,1,p); cholVinv= dmatrix(1,p,1,p);
 
-    thmode[*nsel +1]= log(thmode[*nsel +1]); 
+    thmode[*nsel +1]= log(thmode[*nsel +1]);
     if (*symmetric ==0) thmode[p]= atanh(thmode[p]);
     cholS_inv(cholhess, p, cholV);
     for (i=1; i<=p; i++) {
@@ -1402,7 +1402,7 @@ void postmodeAlaplCDA(double *thmode, double *fmode, double **hess, int *sel, in
 
       //If new value improves target function, update thmode, fmode
       if (fnew<(*fmode)) {
-	err= max_xy(err,fabs(thmode[j]-thnew[j])); 
+	err= max_xy(err,fabs(thmode[j]-thnew[j]));
 	ferr+= *fmode - fnew;
 	thmode[j]= thnew[j];
 	(*fmode)= fnew;
@@ -1537,10 +1537,10 @@ void mleAlaplCDA(double *thmode, double *fmode, double *ypred, int *sel, int *ns
 	  loglAlapl(&fnew,ypred,thnew,nsel,sel,n,&scale,&alpha,y,x,symmetric);
 	  jj++;
 	}
-        if (fnew > *fmode) { 
-	  err= max_xy(err,fabs(thnew[j]-thmode[j])); 
-	  thmode[j]= thnew[j]; 
-	  (*fmode)= fnew; 
+        if (fnew > *fmode) {
+	  err= max_xy(err,fabs(thnew[j]-thmode[j]));
+	  thmode[j]= thnew[j];
+	  (*fmode)= fnew;
 	} else {
 	  Aselvecx(x, thmode+1, ypred, 0, (*n) -1, sel, nsel);
 	}
@@ -1781,7 +1781,7 @@ void loglnegGradHessAlaplUniv(int j, double *g, double *H, double *th, int *nsel
   sqscale= sqrt(scale);
   (*g)= (*H)= 0;
 
-  if (*symmetric ==0) { 
+  if (*symmetric ==0) {
     alpha= tanh(th[*nsel +2]);
     alphasq= alpha*alpha;
     w1= 1.0 / (1.0 + alpha);
@@ -1810,7 +1810,7 @@ void loglnegGradHessAlaplUniv(int j, double *g, double *H, double *th, int *nsel
 	if (tmp<0) {
 	  (*g)-= wsbar1*tmp;
 	  (*H)-= ws1*tmp;
-	} else { 
+	} else {
 	  (*g)+= wsbar2*tmp;
 	  (*H)+= ws2*tmp;
 	}
@@ -1886,7 +1886,7 @@ void loglnegHessAlapl(double **H, double *th, int *nsel, int *sel, int *n, int *
     H[*nsel +2][*nsel +2]= 2*sumwsy0/sqscale; //hessian wrt alpha
     H[*nsel +1][*nsel +2]= H[*nsel +2][*nsel +1]= 0.5*sumwsbary0/sqscale; //hessian wrt vartheta, alpha
 
-    for (j=0; j< *nsel; j++) { 
+    for (j=0; j< *nsel; j++) {
       H[j+1][*nsel +1]= H[*nsel +1][j+1]= -0.5*Xtwbar[j]/sqscale; //hessian wrt theta, vartheta
       H[j+1][*nsel +2]= H[*nsel +2][j+1]= -Xtws[j]/sqscale; //hessian wrt theta, alpha
     }
@@ -1904,7 +1904,7 @@ void loglnegHessAlapl(double **H, double *th, int *nsel, int *sel, int *n, int *
     wy0= 0;
     for (i=0; i< *n; i++) {
       y0[i]= y[i]-ypred[i];
-      if (y[i]<ypred[i]) { 
+      if (y[i]<ypred[i]) {
 	wy0-= y0[i];
 	for (j=0; j< *nsel; j++) { Xtwbar[j]+= x[sel[j]*(*n) +i]; }
       } else {
@@ -1915,7 +1915,7 @@ void loglnegHessAlapl(double **H, double *th, int *nsel, int *sel, int *n, int *
 
     H[*nsel +1][*nsel +1]= 0.25*wy0/sqscale; //hessian wrt vartheta
 
-    for (j=0; j< *nsel; j++) { 
+    for (j=0; j< *nsel; j++) {
       H[j+1][*nsel +1]= H[*nsel +1][j+1]= -0.5*Xtwbar[j]/sqscale; //hessian wrt theta, vartheta
     }
 
@@ -2097,7 +2097,7 @@ double nlpMargSkewNorm(int *sel, int *nsel, struct marginalPars *pars, int *prio
 
     thsim= dvector(1, p); cholV= dmatrix(1,p,1,p); cholVinv= dmatrix(1,p,1,p);
 
-    thmode[*nsel +1]= log(thmode[*nsel +1]); 
+    thmode[*nsel +1]= log(thmode[*nsel +1]);
     if (*symmetric ==0) thmode[p]= atanh(thmode[p]);
     cholS_inv(cholhess, p, cholV);
     for (i=1; i<=p; i++) {
@@ -2290,7 +2290,7 @@ void postmodeSkewNormCDA(double *thmode, double *fmode, double **hess, int *sel,
   //Initialize at least squares estimate
   leastsquares(thmode, thmode+(*nsel)+1, ypred, y, x, XtX, ytX, n, pvar, sel, nsel);
   for (i=0; i<(*n); i++) { if (y[i]<=ypred[i]) { s1+= pow(y[i]-ypred[i], 2.0); } else { s2+= pow(y[i]-ypred[i], 2.0); } }
-  if (*symmetric ==0) { 
+  if (*symmetric ==0) {
     pows1= pow(s1, 1.0/3.0); pows2= pow(s2, 1.0/3.0);
     thmode[p]= (pows1 - pows2)/(pows1 + pows2);
     thmode[*nsel +1]= (0.25/((*n)+.0)) * pow(pows1 + pows2, 3.0);
@@ -2772,7 +2772,7 @@ void loglnegGradSkewNormUniv(int j, double *g, double *th, int *nsel, int *sel, 
 
   }
 
-  if (j== *nsel +1) { 
+  if (j== *nsel +1) {
     (*g)= 0.5*(*n) - 0.5*y0Wy0/sigma;
   } else if (j== *nsel +2) {
     (*g)= 0.5*y0Wsy0/sigma;
@@ -3275,7 +3275,7 @@ SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy
 double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   int i, j, nu;
   double num, den, ans=0.0, term1, *m, **S, **Sinv, detS, *thopt, **Voptinv, fopt, phiadj, tauinv= 1.0/(*(*pars).tau), nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss;
-  if (*nsel ==0) {
+  if (*nsel == 0) {
     term1= .5*(*(*pars).n + *(*pars).alpha);
     num= .5*(*(*pars).alpha)*log(*(*pars).lambda) + gamln(&term1);
     den= .5*(*(*pars).n)*(LOG_M_PI) + gamln(&alphahalf);

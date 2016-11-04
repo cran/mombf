@@ -23,7 +23,7 @@ modselIntegrals::~modselIntegrals() {
 }
 
 //Return log(marginal likelihood) + log(prior). Uses logjointSaved if available, else adds result to logjointSaved. When maxVars>16, only models with a log-difference <=10 with the current mode are stored
-// Input: 
+// Input:
 //
 //   - sel: integer vector [0..maxVars-1], where 0's and 1's indicate covariates out/in the model (respectively)
 //   - nsel: number of covariates in the model (i.e. sum(sel))
@@ -36,11 +36,12 @@ double modselIntegrals::getJoint(int *sel, int *nsel, struct marginalPars *pars)
 
   for (i=0; i< *nsel; i++) zerochar[sel[i]]= '1';
   std::string s (zerochar);
-  
-  if (logjointSaved.count(s) > 0) { 
+
+  if (logjointSaved.count(s) > 0) {
     ans= logjointSaved[s];
   } else {
     ans= marginalFunction(sel,nsel,pars);
+    //Rprintf("marginal=%f, prior=%f\n",ans,priorFunction(sel,nsel,pars));
     ans+= priorFunction(sel,nsel,pars);
     double d= maxIntegral - ans;
     if (d<10 || maxVars<=16) logjointSaved[s]= ans;
@@ -53,4 +54,4 @@ double modselIntegrals::getJoint(int *sel, int *nsel, struct marginalPars *pars)
   for (i=0; i<= *nsel; i++) this->zerochar[sel[i]]= '0';
 
   return ans;
-} 
+}

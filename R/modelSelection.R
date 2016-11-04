@@ -114,7 +114,7 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, enumerate= ifelse(ncol
       method <- as.integer(2)
     }
   } else if (method=='auto') {
-    if (priorCoef@priorDistr!='pMOM') { method <- as.integer(0) } else { method <- as.integer(2) }
+    if (priorCoef@priorDistr=='pMOM') { method <- as.integer(-1) } else { method <- as.integer(0) }
   } else if (method=='plugin') {
     method <- as.integer(2)
   } else {
@@ -165,9 +165,9 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, enumerate= ifelse(ncol
     stop('Prior specified in priorDelta not recognized')
   }
   if (!is.null(colnames(x))) { nn <- colnames(x) } else { nn <- paste('x',1:ncol(x),sep='') }
-  
+
   if (!enumerate) {
-      
+
     #Initialize
     if (familyint==0) { postMode <- rep(as.integer(0),p+2) } else { postMode <- rep(as.integer(0),p) }
     postModeProb <- double(1)
@@ -190,12 +190,12 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, enumerate= ifelse(ncol
     ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,niter,thinning,burnin,ndeltaini,deltaini,n,p,y,sumy2,as.double(x),XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taualpha,r,prDelta,prDeltap,parprDeltap,as.integer(verbose))
     postSample <- matrix(ans[[1]],ncol=ifelse(familyint!=0,p,p+2))
     margpp <- ans[[2]]; postMode <- ans[[3]]; postModeProb <- ans[[4]]; postProb <- ans[[5]]
-    
+
   } else {
 
     #Model enumeration
     if (verbose) cat("Enumerating models...\n")
-    if (maxvars==ncol(x)) {
+    if (maxvars>=ncol(x)) {
       models= expand.grid(lapply(1:ifelse(familyint==0,ncol(x)+2,ncol(x)), function(z) c(FALSE,TRUE)))
       nmodels= as.integer(nrow(models))
     } else {
@@ -222,7 +222,7 @@ modelSelection <- function(y, x, center=TRUE, scale=TRUE, enumerate= ifelse(ncol
     }
     models= models[order(models$pp,decreasing=TRUE),]
   }
-  
+
   if (familyint!=0) {
     colnames(postSample) <- names(postMode) <- names(margpp) <- nn
   } else {
