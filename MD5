@@ -1,5 +1,5 @@
-c4f204ff72fe8262c9bdae3a572786f3 *ChangeLog
-3e320cf84acfb517447593f01d025e6d *DESCRIPTION
+7e890e0ea3163c32747f90e7dba69ca5 *ChangeLog
+e858ce8d8f205f5519b62277df6c83df *DESCRIPTION
 7b9fd041522bac846027da1323c83550 *INDEX
 cb47d923bf334eaab18b2a44c2b149d0 *NAMESPACE
 3734e8c1b39af9c73765fce92ff0b71e *R/AllClasses.R
@@ -12,7 +12,7 @@ c71766a0a32945ee7f838c63bd7db873 *R/dmom.R
 690e39b24795d3b4c355772266cdcf1e *R/emomLM.R
 551da54f3718ee968fd7cfe631e539cc *R/greedyGLM.R
 713b1ed9dab8308fcc2617ca54fa55fe *R/modelSelection.R
-e03992462c5f5cb02ede156a2eec04fc *R/modelsearch.R
+beaba859d4b7da24c633451b2ec5f7b0 *R/modelsearch.R
 3aef819428ca361f8d118b78dea07e45 *R/mombf.R
 1754ef55b3db05666857f9c2037e0efb *R/msPriorSpec.R
 8fe41bc2c0442c45bdfce01753192a67 *R/nlpMarginal.R
@@ -27,7 +27,7 @@ e6d40c0fea7574e308862f964be94fb5 *R/zellnerLM.R
 0ba81eb8bc9af12477aba879106fb504 *data/hald.rda
 f0794bcf23bfb03d6743334819045568 *inst/doc/mombf.R
 aa28930c5ded685a269b05c1cfaeaab8 *inst/doc/mombf.Rnw
-bd504bd23dc06681aa610ba8bd1ce391 *inst/doc/mombf.pdf
+e4e13de88f68af3d623972d8e924c555 *inst/doc/mombf.pdf
 40ae37c3d670fdb7b139e18e056ff5ac *man/bbPrior.Rd
 558d6336d31d225fdf47f30cf81f27f7 *man/dalapl.Rd
 51673d11490d79553fcc351e1e73bf05 *man/dmom.Rd
