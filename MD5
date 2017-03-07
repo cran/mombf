@@ -1,5 +1,5 @@
 7e890e0ea3163c32747f90e7dba69ca5 *ChangeLog
-ff0f479f499a33e96b4356704b835407 *DESCRIPTION
+bf39b53416fee4f0b8f5f287305297a0 *DESCRIPTION
 7b9fd041522bac846027da1323c83550 *INDEX
 c571989d46fc257830928a5b5a6f88a2 *NAMESPACE
 3734e8c1b39af9c73765fce92ff0b71e *R/AllClasses.R
@@ -27,7 +27,7 @@ e6d40c0fea7574e308862f964be94fb5 *R/zellnerLM.R
 0ba81eb8bc9af12477aba879106fb504 *data/hald.rda
 f0794bcf23bfb03d6743334819045568 *inst/doc/mombf.R
 1560c918eadbe88490669fb302cf9929 *inst/doc/mombf.Rnw
-5239783726683c1f12659fb3b3bdd926 *inst/doc/mombf.pdf
+5f880e8a87ae03ef680a305eab9674a2 *inst/doc/mombf.pdf
 40ae37c3d670fdb7b139e18e056ff5ac *man/bbPrior.Rd
 558d6336d31d225fdf47f30cf81f27f7 *man/dalapl.Rd
 51673d11490d79553fcc351e1e73bf05 *man/dmom.Rd
@@ -52,7 +52,7 @@ a238778fa64815d27fef89642be3c71b *src/PolynomialRootFinder.h
 d7c411f8f7d1b9067599ab1a4e3d4f8b *src/cstat.cpp
 319173f8214da819965159bf97d6e101 *src/cstat.h
 4c9cabc7c8d2d4990b67103a1584f0fb *src/do_mombf.h
-ccf3de2f7dce393632a39a990892a92d *src/modelSel.cpp
+54f08ff729aebd5c4c960531de186d82 *src/modelSel.cpp
 fd2a1564f05e524c286e67dd9042d17c *src/modelSel.h
 072442d3dcce4bdde59b740f34ccf2e2 *src/modselIntegrals.cpp
 d05a8d7d48375fa01e70d36a831985f8 *src/modselIntegrals.h
