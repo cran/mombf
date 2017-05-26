@@ -1,5 +1,5 @@
-7e890e0ea3163c32747f90e7dba69ca5 *ChangeLog
-f872cc8517eb608ac8be8699423e21b2 *DESCRIPTION
+d967f1b82a76b9dfa228956582ec1233 *ChangeLog
+9fc929913584cb1640ceab1896822bd3 *DESCRIPTION
 7b9fd041522bac846027da1323c83550 *INDEX
 c571989d46fc257830928a5b5a6f88a2 *NAMESPACE
 3734e8c1b39af9c73765fce92ff0b71e *R/AllClasses.R
@@ -11,7 +11,7 @@ c571989d46fc257830928a5b5a6f88a2 *NAMESPACE
 c71766a0a32945ee7f838c63bd7db873 *R/dmom.R
 690e39b24795d3b4c355772266cdcf1e *R/emomLM.R
 551da54f3718ee968fd7cfe631e539cc *R/greedyGLM.R
-751104d9e87ae63c8d38f48bc00b4fd6 *R/modelSelection.R
+2bfe63de7a41369cd588c1e065b1006e *R/modelSelection.R
 beaba859d4b7da24c633451b2ec5f7b0 *R/modelsearch.R
 3aef819428ca361f8d118b78dea07e45 *R/mombf.R
 1754ef55b3db05666857f9c2037e0efb *R/msPriorSpec.R
@@ -27,14 +27,14 @@ e6d40c0fea7574e308862f964be94fb5 *R/zellnerLM.R
 0ba81eb8bc9af12477aba879106fb504 *data/hald.rda
 f0794bcf23bfb03d6743334819045568 *inst/doc/mombf.R
 1560c918eadbe88490669fb302cf9929 *inst/doc/mombf.Rnw
-702895aa6ff82e6aef250aa597250d79 *inst/doc/mombf.pdf
+5a9dc33c6ff1e0053a78aa324ce33e8a *inst/doc/mombf.pdf
 40ae37c3d670fdb7b139e18e056ff5ac *man/bbPrior.Rd
 558d6336d31d225fdf47f30cf81f27f7 *man/dalapl.Rd
 51673d11490d79553fcc351e1e73bf05 *man/dmom.Rd
 353dbcc431c3fd65aa590e6659b0f310 *man/eprod.Rd
 160af2a742b048100f80bbb849631835 *man/hald.Rd
 e9fbcb4d2d80a4a3a1bcdf784727baf5 *man/mode2g.Rd
-829c16bc4097ca67f7e76d8d1980e13b *man/modelSelection.Rd
+479fa3d00b14d29d8c6b5d286a67962b *man/modelSelection.Rd
 b75b17c3a6cff4af10029eee61037819 *man/mombf.Rd
 f95a06c0103d75de569207fce2fa569e *man/momknown.Rd
 edd315d7377f34a9f22599b41ce027ab *man/msPriorSpec-class.Rd
@@ -51,9 +51,9 @@ ed214642f3a047c7b624fb2fb25a74d8 *src/Makevars
 a238778fa64815d27fef89642be3c71b *src/PolynomialRootFinder.h
 d7c411f8f7d1b9067599ab1a4e3d4f8b *src/cstat.cpp
 319173f8214da819965159bf97d6e101 *src/cstat.h
-4c9cabc7c8d2d4990b67103a1584f0fb *src/do_mombf.h
-d0f40bd1ab9f8f1b32f127e9d4ebfd43 *src/modelSel.cpp
-fd2a1564f05e524c286e67dd9042d17c *src/modelSel.h
+081812a2adab6b901cce0929d49daa99 *src/do_mombf.h
+6c65ff6c76dc2cfd39421743b5a13563 *src/modelSel.cpp
+38806136382af29314f25483ae416a04 *src/modelSel.h
 072442d3dcce4bdde59b740f34ccf2e2 *src/modselIntegrals.cpp
 d05a8d7d48375fa01e70d36a831985f8 *src/modselIntegrals.h
 1560c918eadbe88490669fb302cf9929 *vignettes/mombf.Rnw
