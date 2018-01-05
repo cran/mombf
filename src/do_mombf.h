@@ -14,6 +14,8 @@
  */
 extern "C" {
 
+  SEXP bsplineCI(SEXP x, SEXP degree, SEXP knots);
+
   SEXP eprod_I(SEXP m, SEXP S, SEXP n, SEXP power, SEXP dof);
 
   SEXP pmomLM_I(SEXP niter, SEXP thinning, SEXP burnin, SEXP niniModel, SEXP iniModel, SEXP iniCoef1, SEXP iniCoef2, SEXP iniPhi, SEXP iniOthers, SEXP verbose, SEXP n, SEXP p1, SEXP p2, SEXP isbinary, SEXP ybinary, SEXP y, SEXP sumy2, SEXP x1, SEXP x2, SEXP XtX, SEXP ytX, SEXP cholS2, SEXP S2inv, SEXP cholS2inv, SEXP colsumx1sq, SEXP alpha, SEXP lambda, SEXP priorCoef, SEXP r, SEXP tau1, SEXP tau2, SEXP priorTau1, SEXP atau1, SEXP btau1, SEXP priorModel, SEXP prModelpar);
@@ -44,6 +46,7 @@ extern "C" {
 }
 
 static R_CallMethodDef callMethods[]  = {
+  {"bsplineCI", (DL_FUNC) &bsplineCI, 3},
   {"eprod_I", (DL_FUNC) &eprod_I, 5},
   {"pmomLM_I", (DL_FUNC) &pmomLM_I, 36},
   {"modelSelectionEnumCI", (DL_FUNC) &modelSelectionEnumCI, 27},

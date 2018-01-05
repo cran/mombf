@@ -458,6 +458,8 @@ void proposalpmom(double *propPars, double *m, double *S, double *phi, int *r, d
   propPars[5]= 1-propPars[4];
 }
 
+
+
 //Expectation of prod_j th_j^{2*power} under multivariate Normal/T with mean m, covariance S, dimension n, degrees of freedom dof (dof=-1 for Normal)
 SEXP eprod_I(SEXP m, SEXP S, SEXP n, SEXP power, SEXP dof) {
   SEXP ans;
@@ -4196,5 +4198,22 @@ double zellnerMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
 
   }
   if (*(*pars).logscale !=1) { ans= exp(ans); }
+  return ans;
+}
+
+
+
+//*************************************************************************************
+// ADDITIVE MODELS
+//*************************************************************************************
+
+SEXP bsplineCI(SEXP x, SEXP degree, SEXP knots) {
+  int nknots=LENGTH(knots), nx=LENGTH(x);
+  SEXP ans;
+  PROTECT(ans= allocVector(REALSXP, (nknots-INTEGER(degree)[0]-1) * nx));
+
+  bspline_vec(REAL(ans), REAL(x), &nx, INTEGER(degree), REAL(knots), &nknots);
+
+  UNPROTECT(1);
   return ans;
 }
