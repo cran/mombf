@@ -364,3 +364,50 @@ pos.prob <- prior.prob*bf/sum(prior.prob*bf)
 pos.prob
 
 
+###################################################
+### code chunk number 31: mixtures1
+###################################################
+set.seed(1)
+n=200; k=1:3
+x= rnorm(n)
+
+
+###################################################
+### code chunk number 32: mixtures2
+###################################################
+fit= bfnormmix(x=x,k=k,q=3,q.niw=1,B=10^4)
+postProb(fit)
+
+
+###################################################
+### code chunk number 33: mixturesNIW
+###################################################
+mcmcout= postSamples(fit)
+names(mcmcout)
+names(mcmcout[[2]])
+colMeans(mcmcout[[2]]$eta)
+
+parest= coef(fit)
+names(parest)
+parest[[2]]
+
+
+###################################################
+### code chunk number 34: mixturesMOMIW
+###################################################
+w= postSamples(fit)[[2]]$momiw.weight
+apply(mcmcout[[2]]$eta, 2, weighted.mean, w=w)
+apply(mcmcout[[2]]$mu, 2, weighted.mean, w=w)
+
+
+###################################################
+### code chunk number 35: mixture2comp
+###################################################
+set.seed(1)
+n=200; k=1:3; probs= c(1/2,1/2)
+mu1= -1.5; mu2=  1.5
+x= rnorm(n) + ifelse(runif(n)<probs[1],mu1,mu2)
+fit= bfnormmix(x=x,k=k,q=3,q.niw=1,B=10^4)
+postProb(fit)
+
+

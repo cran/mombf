@@ -5,48 +5,82 @@
 #ifndef DO_MOMBF_H
 #define DO_MOMBF_H      1
 
-#include <Rdefines.h>
-#include "R_ext/Rdynload.h"
+#include <R.h>
+#include <Rinternals.h>
+#include <stdlib.h> // for NULL
+#include <R_ext/Rdynload.h>
 
+#include <Rdefines.h>
+#include "modelSel.h"
+#include "mixtures.h"
+#include "cstat.h"
+
+/* FIXME:
+   Check these declarations against the C/Fortran source code.
+*/
+
+/* .Call calls */
+/*extern SEXP bsplineCI(SEXP, SEXP, SEXP);
+extern SEXP eprod_I(SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP greedyVarSelCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP mnormCI(SEXP, SEXP, SEXP);
+extern SEXP modelSelectionEnumCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP modelSelectionGibbsCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP nlpMarginalAlaplI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP nlpMarginalSkewNormI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP normalmixGibbsCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pemomMarginalUI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pimomMarginalKI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pimomMarginalUI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pmomLM_I(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pmomMarginalKI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP pmomMarginalUI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP rnlpCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP rnlpPostCI_lm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP rnorm_truncMultCI(SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP rtmvnormCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP rtmvnormProdCI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP zellnerMarginalKI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP zellnerMarginalUI(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+*/
+
+static const R_CallMethodDef CallEntries[] = {
+    {"bsplineCI",             (DL_FUNC) &bsplineCI,              3},
+    {"eprod_I",               (DL_FUNC) &eprod_I,                5},
+    {"greedyVarSelCI",        (DL_FUNC) &greedyVarSelCI,        28},
+    {"mnormCI",               (DL_FUNC) &mnormCI,                3},
+    {"modelSelectionEnumCI",  (DL_FUNC) &modelSelectionEnumCI,  27},
+    {"modelSelectionGibbsCI", (DL_FUNC) &modelSelectionGibbsCI, 33},
+    {"nlpMarginalAlaplI",     (DL_FUNC) &nlpMarginalAlaplI,     22},
+    {"nlpMarginalSkewNormI",  (DL_FUNC) &nlpMarginalSkewNormI,  20},
+    {"normalmixGibbsCI",      (DL_FUNC) &normalmixGibbsCI,      13},
+    {"pemomMarginalUI",       (DL_FUNC) &pemomMarginalUI,       15},
+    {"pimomMarginalKI",       (DL_FUNC) &pimomMarginalKI,       13},
+    {"pimomMarginalUI",       (DL_FUNC) &pimomMarginalUI,       15},
+    {"pmomLM_I",              (DL_FUNC) &pmomLM_I,              36},
+    {"pmomMarginalKI",        (DL_FUNC) &pmomMarginalKI,        14},
+    {"pmomMarginalUI",        (DL_FUNC) &pmomMarginalUI,        16},
+    {"rnlpCI",                (DL_FUNC) &rnlpCI,                 9},
+    {"rnlpPostCI_lm",         (DL_FUNC) &rnlpPostCI_lm,         11},
+    {"rnorm_truncMultCI",     (DL_FUNC) &rnorm_truncMultCI,      5},
+    {"rtmvnormCI",            (DL_FUNC) &rtmvnormCI,             7},
+    {"rtmvnormProdCI",        (DL_FUNC) &rtmvnormProdCI,         9},
+    {"zellnerMarginalKI",     (DL_FUNC) &zellnerMarginalKI,     11},
+    {"zellnerMarginalUI",     (DL_FUNC) &zellnerMarginalUI,     13},
+    {NULL, NULL, 0}
+};
+
+void R_init_mombf(DllInfo *dll)
+{
+    R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+    R_useDynamicSymbols(dll, FALSE);
+}
 
 /*
- * Function Prototypes
- */
-extern "C" {
-
-  SEXP bsplineCI(SEXP x, SEXP degree, SEXP knots);
-
-  SEXP eprod_I(SEXP m, SEXP S, SEXP n, SEXP power, SEXP dof);
-
-  SEXP pmomLM_I(SEXP niter, SEXP thinning, SEXP burnin, SEXP niniModel, SEXP iniModel, SEXP iniCoef1, SEXP iniCoef2, SEXP iniPhi, SEXP iniOthers, SEXP verbose, SEXP n, SEXP p1, SEXP p2, SEXP isbinary, SEXP ybinary, SEXP y, SEXP sumy2, SEXP x1, SEXP x2, SEXP XtX, SEXP ytX, SEXP cholS2, SEXP S2inv, SEXP cholS2inv, SEXP colsumx1sq, SEXP alpha, SEXP lambda, SEXP priorCoef, SEXP r, SEXP tau1, SEXP tau2, SEXP priorTau1, SEXP atau1, SEXP btau1, SEXP priorModel, SEXP prModelpar);
-
-  //Model selection
-  SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP Sverbose);
-
-  SEXP modelSelectionGibbsCI(SEXP SpostModeini, SEXP SpostModeiniProb, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP Sniter, SEXP Sthinning, SEXP Sburnin, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP Sverbose);
-
-  SEXP greedyVarSelCI(SEXP Sknownphi, SEXP SpriorCoef, SEXP Sniter, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP Sverbose);
-
-  //Non-local prior marginal likelihoods
-  SEXP pmomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale);
-  SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
-
-  SEXP pimomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale);
-  SEXP pimomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
-
-  SEXP pemomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
-
-  //Integrated likelihood for linear models under Zellner's prior
-  SEXP zellnerMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Slogscale);
-  SEXP zellnerMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Slogscale, SEXP Salpha, SEXP Slambda);
-
-  //Integrated likelihoods under skew normal, laplace and asymmetric laplace residuals
-  SEXP nlpMarginalSkewNormI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP Smethod, SEXP SoptimMethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda, SEXP SprCoef);
-  SEXP nlpMarginalAlaplI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP Ssymmetric, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda, SEXP SprCoef);
-}
 
 static R_CallMethodDef callMethods[]  = {
   {"bsplineCI", (DL_FUNC) &bsplineCI, 3},
+  {"mnormCI", (DL_FUNC) &mnormCI, 3},
   {"eprod_I", (DL_FUNC) &eprod_I, 5},
   {"pmomLM_I", (DL_FUNC) &pmomLM_I, 36},
   {"modelSelectionEnumCI", (DL_FUNC) &modelSelectionEnumCI, 27},
@@ -61,14 +95,16 @@ static R_CallMethodDef callMethods[]  = {
   {"zellnerMarginalUI", (DL_FUNC) &zellnerMarginalUI, 13},
   {"nlpMarginalSkewNormI", (DL_FUNC) &nlpMarginalSkewNormI, 20},
   {"nlpMarginalAlaplI", (DL_FUNC) &nlpMarginalAlaplI, 22},
+  {"normalmixGibbsCI", (DL_FUNC) &normalmixGibbsCI, 12},
   {NULL, NULL, 0}
 };
+
 
 void R_init_mombf(DllInfo *info)
 {
    R_registerRoutines(info, NULL, callMethods, NULL, NULL);
    R_useDynamicSymbols(info, FALSE);
 }
-
+*/
 
 #endif /* DO_MOMBF_H */

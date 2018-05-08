@@ -34,9 +34,21 @@ if (!isGeneric("demom")) {
 }
 
 
+if (!isGeneric("marginalIW")) {
+  setGeneric("marginalNIW", function(x, xbar, samplecov, n, z, g,  mu0=rep(0,ncol(x)), nu0=ncol(x)+4, S0,logscale=TRUE) standardGeneric("marginalNIW"))
+}
+
+
 if (!isGeneric("postProb")) {
   setGeneric("postProb", function(object, nmax, method='norm') standardGeneric("postProb"))
 }
+
+
+if (!isGeneric("postSamples")) {
+    setGeneric("postSamples", function(object) standardGeneric("postSamples"))
+}
+
+    
 
 if (!isGeneric("rnlp")) {
   setGeneric("rnlp", function(y, x, m, V, msfit, priorCoef, priorVar=igprior(alpha=0.01,lambda=0.01), niter=10^3, burnin=round(niter/10), thinning=1, pp='norm') standardGeneric("rnlp"))
