@@ -11,8 +11,12 @@
 \alias{demom,matrix-method}
 \alias{demom,vector-method}
 \alias{pemom}
+\alias{dmomigmarg}
+\alias{pmomigmarg}
+\alias{demomigmarg}
+\alias{pemomigmarg}
 %- Also NEED an '\alias' for EACH other topic documented here.
-\title{ Moment prior and inverse moment prior. }
+\title{ Non-local prior density, cdf and quantile functions. }
 \description{
   \code{dmom}, \code{dimom} and \code{demom} return the density for the
   moment, inverse moment and exponential moment priors.
@@ -20,9 +24,13 @@
   moment, inverse moment and exponential moment priors (respectively).
   \code{qmom} and \code{qimom} return the quantiles for the univariate
   moment and inverse moment priors.
+  \code{dmomigmarg} returns the marginal density implied by a
+  MOM(x;tau*phi)*Invgamma(phi;a/2,b/2), \code{pmomigmarg} its cdf.
+  Analogously \code{demomigmarg} and \code{demomigmarg} for
+  eMOM(x;tau*phi)*Invgamma(phi;a/2,b/2)
 }
 \usage{
-dmom(x, tau, a.tau, b.tau, phi=1, r=1, V1, baseDensity='normal', nu=3, 
+dmom(x, tau, a.tau, b.tau, phi=1, r=1, V1, baseDensity='normal', nu=3,
 logscale=FALSE, penalty='product')
 dimom(x, tau=1, phi=1, V1, logscale=FALSE, penalty='product')
 demom(x, tau, a.tau, b.tau, phi=1, logscale=FALSE)
@@ -33,6 +41,12 @@ pemom(q, tau, a.tau, b.tau)
 
 qmom(p, V1 = 1, tau = 1)
 qimom(p, V1 = 1, tau = 1, nu = 1)
+
+dmomigmarg(x,tau,a,b,logscale=FALSE)
+pmomigmarg(x,tau,a,b)
+
+demomigmarg(x,tau,a,b,logscale=FALSE)
+pemomigmarg(x,tau,a,b)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -52,8 +66,9 @@ qimom(p, V1 = 1, tau = 1, nu = 1)
   \item{phi}{ Prior dispersion parameter is \code{tau*phi}. See
     details. }
   \item{r}{Prior power parameter for MOM prior is \code{2*r}}
-  \item{baseDensity}{For \code{baseDensity=='normal'} a normal MOM prior
-  is used, for \code{baseDensity=='t'} a T MOM prior with \code{nu}
+  \item{baseDensity}{For \code{baseDensity=='normal'} a Normal MOM prior
+    is used, for \code{baseDensity=='laplace'} a Laplace MOM prior,
+    for \code{baseDensity=='t'} a T MOM prior with \code{nu}
   degrees of freedom is used.}
   \item{nu}{ Prior parameter indicating the degrees of freedom for the
     quadratic T MOM and iMOM prior densities. The
@@ -63,6 +78,8 @@ qimom(p, V1 = 1, tau = 1, nu = 1)
     be used. \code{penalty=='quadratic'} indicates quadratic iMOM. See Details.}
   \item{logscale}{ For \code{logscale==TRUE}, \code{dimom} returns the
     natural log of the prior density.}
+  \item{a}{The marginal prior on phi is IG(a/2,b/2)}
+  \item{b}{The marginal prior on phi is IG(a/2,b/2)}
 }
 \details{
  For \code{type=='quadratic'} the density is as follows.
@@ -74,33 +91,34 @@ qimom(p, V1 = 1, tau = 1, nu = 1)
    q(theta)*dmvt(theta,theta0,tau*phi*V1,df=nu).
    The inverse moment prior density is proportional to
    \code{q(theta)^(-(nu+d)/2) * exp(-1/q(theta))}.
-   
+
    pmom, pimom and qimom use closed-form expressions, while qmom uses
    nlminb to find quantiles numerically.
    Only the univariate version is implemented. In this case the product
    MOM is equivalent to the quadratic MOM. The same happens for the
    iMOM.
 
-   Only the product eMOM prior is implemented.
+   \code{dmomigmarg} returns the marginal density
+
+   p(x)= int MOM(x;0,tau*phi) IG(phi;a/2,b/2) dphi
+
+
 }
 \value{
-  \code{dmom} returns the value of the moment prior density.
-  \code{dimom} returns the value of the inverse moment prior density.
+  Prior density, cumulative distribution function or quantile.
 }
 \references{
     Johnson V.E., Rossell D. Non-Local Prior Densities for Default
   Bayesian Hypothesis Tests. Journal of the Royal Statistical Society B,
   2010, 72, 143-170.
-  
+
   Johnson V.E., Rossell D. Bayesian model selection in high-dimensional
-  settings. Technical report. 2011
+  settings. Journal of the American Statistical Assocation, 2012, 107,
+  649-660
 
 See http://rosselldavid.googlepages.com for technical
   reports. }
 \author{ David Rossell }
-\seealso{ \code{\link{g2mode}} to find the
-  prior mode corresponding to a given \code{g}. \code{\link{mode2g}}
-  to find the g value corresponding to a given prior mode.}
 \examples{
 #evaluate and plot the moment and inverse moment priors
 library(mombf)

@@ -1,3 +1,22 @@
+CHANGES IN VERSION 2.2.1
+- Fixed bug in coef and predict methods for msfit objects
+- Fixed compiler warnings in Windows
+
+CHANGES IN VERSION 2.2.0
+- Fixed bug in modelSelection when computing Binomial model prior probabilities
+- Added Normal Accelerated Failure Time models
+- Added coef method to extract BMA estimates and intervals from msfit objects
+- Added predict method to extract BMA predictions and intervals from msfit objects
+- Added additive models to modelSelection
+- Added support for formulas to modelSelection
+- Added RcppArmadillo
+- Added option to group variables and impose hierarchical restrictions to
+modelSelection
+- Added rnlp method that only requires msfit
+- msfit objects now store priorCoef, priorDelta, priorVar and standardized versions of (y,x)
+- Added baseDensity='laplace' to dmom
+- Added dmomigmarg, pmomigmarg
+
 CHANGES IN VERSION 2.1.2
 - Added complexity prior to modelSelection and bms_ortho
 - Added option includeModels to postModeOrtho.

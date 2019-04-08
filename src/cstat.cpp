@@ -6,16 +6,7 @@
  Edits: P. Roebuck
 ***********************************************************/
 
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <assert.h>
-#include <R.h>
-#include <Rinternals.h>
 #include "cstat.h"
-
 
 //static const char interface_c_sccs_id[] = "%W%";
 //static const char mess_c_sccs_id[] = "%W%";
@@ -35,7 +26,7 @@
  * Globals
  */
 static long is1 = 123456789, is2 = 981963;
-static int set = 0;
+static int cstat_set = 0;
 
 FILE *ifile, *ofile;
 int nv = 0;
@@ -102,12 +93,7 @@ double meani(const int *x,
     int i;
     double value = 0.0;
 
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-
-    for (i = 0; i <= lim; i++) {
-        value += x[i];
-    }
+    for (i = 0; i <= lim; i++) { value += x[i]; }
     value *= 1.0 / (lim+1.0);
     return value;
 }
@@ -120,10 +106,6 @@ double wmeani(const int *x,
     int i;
     double value = 0.0;
     double wtot = 0.0;
-
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(w != NULL);
 
     for (i = 0; i <= lim; i++) {
         value += w[i] * x[i];
@@ -141,12 +123,7 @@ double meanx(const double *x,
     int i;
     double value = 0.0;
 
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-
-    for (i = 0; i <= lim; i++) {
-        value += x[i];
-    }
+    for (i = 0; i <= lim; i++) { value += x[i]; }
     value *= 1.0 / (lim+1.0);
     return value;
 }
@@ -159,10 +136,6 @@ double wmeanx(const double *x,
     int i;
     double value = 0.0;
     double wtot = 0.0;
-
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(w != NULL);
 
     for (i = 0; i <= lim; i++) {
         value += w[i] * x[i];
@@ -181,13 +154,7 @@ double vari(const int *x,
     int i;
     double value = 0.0;
 
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(unbiased == false || unbiased == true);
-
-    for (i = 0; i <= lim; i++) {
-      value += pow((double) x[i], 2.0) / (1.0+lim);
-    }
+    for (i = 0; i <= lim; i++) { value += pow((double) x[i], 2.0) / (1.0+lim);  }
     value -= pow(meani(x, lim), 2);
     if (unbiased && lim>0) {
         value *= (1.0+lim) / (0.0+lim);
@@ -203,10 +170,6 @@ double wvari(const int *x,
     int i;
     double value = 0.0;
     double wtot = 0.0;
-
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(w != NULL);
 
     for (i = 0; i <= lim; i++) {
       value += w[i] * pow((double) x[i], 2.0);
@@ -225,13 +188,7 @@ double varx(const double *x,
     int i;
     double value = 0.0;
 
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(unbiased == false || unbiased == true);
-
-    for (i = 0; i <= lim; i++) {
-        value += pow(x[i], 2) / (1.0+lim);
-    }
+    for (i = 0; i <= lim; i++) { value += pow(x[i], 2) / (1.0+lim); }
     value -= pow(meanx(x, lim), 2);
     if (unbiased && lim>0) {
         value *= (1.0+lim) / (lim+0.0);
@@ -247,10 +204,6 @@ double wvarx(const double *x,
     int i;
     double value = 0.0;
     double wtot = 0.0;
-
-    //assert(x != NULL);
-    //assert(lim >= 0);    /* :TBD: Change datatype to 'unsigned'? */
-    //assert(w != NULL);
 
     for (i = 0; i <= lim; i++) {
         value += w[i] * pow(x[i], 2);
@@ -270,8 +223,6 @@ double cv(const double *x,
     double m = 0.0;
     double s = 0.0;
     double ans;
-
-    //assert(x != NULL);
 
     for (i = ini; i <= fi; i++) {
         double value;
@@ -297,8 +248,6 @@ double cvinv(const double *x,
     double s = 0.0;
     double ans;
 
-    //assert(x != NULL);
-
     for (i = ini; i <= fi; i++) {
         double value;
 
@@ -321,9 +270,6 @@ void colMeans(double *m,
               int ncol)
 {
     int i, j;
-
-    //assert(m != NULL);
-    //assert(x != NULL);
 
     for (j = 0; j < ncol; j++) {
         m[j] = 0.0;
@@ -348,9 +294,6 @@ void colVar(double *v,
     int i, j;
     double *m;
     double *m2;
-
-    //assert(v != NULL);
-    //assert(x != NULL);
 
     m  = dvector(0, ncol-1);
     m2 = dvector(0, ncol-1);
@@ -388,9 +331,6 @@ void colCV(double *cv,
     double *m;
     double *s;
 
-    //assert(cv != NULL);
-    //assert(x != NULL);
-
     m = dvector(0, ncol);
     s = dvector(0, ncol);
 
@@ -427,9 +367,6 @@ void colCVinv(double *cv,
     int j;
     double *m;
     double *s;
-
-    //assert(cv != NULL);
-    //assert(x != NULL);
 
     m = dvector(0, ncol);
     s = dvector(0, ncol);
@@ -670,14 +607,6 @@ void nn_bayes(double *mpo,
   bool posdef;
   double *z;
 
-    //assert(mpo != NULL);
-    //assert(mpr != NULL);
-    //assert(Spo != NULL);
-    //assert(y != NULL);
-    //assert(Spo_inv != NULL);
-    //assert(Spr_inv != NULL);
-    //assert(Slik_inv != NULL);
-
     z = dvector(1, p);
 
     rA_plus_sB(1.0/r1, Spr_inv, 1.0/r2, Slik_inv, Spo_inv, 1, p, 1, p);
@@ -709,12 +638,6 @@ void nn_bayes_rand(double *theta,
     double **S;
     double **S_inv;
     double **cholS;
-
-    //assert(theta != NULL);
-    //assert(Spr_inv != NULL);
-    //assert(mpr != NULL);
-    //assert(Slik_inv != NULL);
-    //assert(y != NULL);
 
     /* Allocate memory */
     z = dvector(0, p-1);
@@ -766,18 +689,6 @@ double nn_integral(const double *x,
     double **cholVsum;
     double *m;
     double ans;
-
-    //assert(x != NULL);
-    //assert(rx != NULL);
-    //assert(Vxinv != NULL);
-    //assert(detVx != NULL);
-    //assert(mpr != NULL);
-    //assert(rpr != NULL);
-    //assert(Vprinv != NULL);
-    //assert(detVpr != NULL);
-    //assert(p != NULL);
-    //assert(logscale != NULL);
-    //assert((*logscale == 0) || (*logscale == 1));
 
     m = dvector(1, *p);
     Vsum = dmatrix(1, *p, 1, *p);
@@ -3080,7 +2991,7 @@ double quadratic_xtAx(const double *x,
  * Note: Faster than xtAy() for symmetric A (saves 25%-50% operations).
  */
 double quadratic_xseltAselxsel(const double *x,
-                               const double *A,
+                               crossprodmat *A,
                                const int *ncolA,
                                const int *nsel,
                                const int *sel)
@@ -3099,12 +3010,12 @@ double quadratic_xseltAselxsel(const double *x,
         int i_sel;
 
         i_sel = sel[i];
-        z += A[i_sel * (*ncolA) + i_sel] * x[i_sel] * x[i_sel];
+        z += (A->at(i_sel * (*ncolA) + i_sel)) * x[i_sel] * x[i_sel];
         for (j = i+1; j <= (*nsel)-1; j++) {
             int j_sel;
 
             j_sel = sel[j];
-            z += 2 * A[i_sel * (*ncolA) + j_sel] * x[i_sel] * x[j_sel];
+            z += 2 * (A->at(i_sel * (*ncolA) + j_sel)) * x[i_sel] * x[j_sel];
         }
     }
     return(z);
@@ -3122,7 +3033,7 @@ double quadratic_xseltAselxsel(const double *x,
  * Note: Faster than xtAy() for symmetric A (saves 25%-50% operations).
  */
 double quadratic_xtAselx(const double *x,
-                         const double *A,
+                         crossprodmat *A,
                          const int *ncolA,
                          const int *nsel,
                          const int *sel)
@@ -3141,9 +3052,9 @@ double quadratic_xtAselx(const double *x,
         int i_sel;
 
         i_sel = sel[i];
-        z += A[i_sel * (*ncolA) + i_sel] * x[i] * x[i];
+        z += (A->at(i_sel * (*ncolA) + i_sel)) * x[i] * x[i];
         for (j = i+1; j <= (*nsel)-1; j++) {
-            z += 2 * A[i_sel * (*ncolA) + sel[j]] * x[i] * x[j];
+	  z += 2 * (A->at(i_sel * (*ncolA) + sel[j])) * x[i] * x[j];
         }
     }
     return(z);
@@ -3534,6 +3445,9 @@ decomposition, A = L * L' . On input, only the upper triangle of a need be given
   for (i=1;i<=n;i++) { for (j=i+1;j<=n;j++) { aout[i][j]= 0; } }  //set upper-diagonal elem to 0
 }
 
+
+
+
 void choldc_inv(double **a, int n, double **aout, bool *posdef) {
   /*Given a positive-definite symmetric matrix a[1..n][1..n], this routine computes the inverse
    of its Cholesky matrix. That is, if A=L * L' it returns the inverse of L
@@ -3580,21 +3494,22 @@ void choldc_inv_internal(double **cholS, int n) {
  *   choldc_inv(S, n, cholSinv, posdef);
  *   det = 1.0 / choldc_det(cholSinv, n);
  */
-double choldc_det(double **chols,
-                  int n)
-{
+double choldc_det(double **chols, int n) {
     int i;
-    double det = 1.0;
+    double value, det = 1.0;
 
     //assert(chols != NULL);
-
-    for (i = 1; i <= n; i++) {
-        double value;
-
-        value = chols[i][i];
-        det *= value * value;
-    }
+    for (i = 1; i <= n; i++) { value = chols[i][i]; det *= value * value; }
     return(det);
+}
+
+double logcholdc_det(double **chols, int n) {
+    int i;
+    double logdet = 0;
+
+    //assert(chols != NULL);
+    for (i = 1; i <= n; i++) { logdet += log(chols[i][i]); }
+    return(2.0*logdet);
 }
 
 
@@ -4401,7 +4316,7 @@ void sampled_wr(double *x,
 void setseed(long is1,
              long is2)
 {
-    set = 1;
+    cstat_set = 1;
     setall(is1, is2);
 }
 
@@ -4410,9 +4325,9 @@ double runif(void)
 {
     double x;
 
-    if (set == 0) {
+    if (cstat_set == 0) {
         setall(is1, is2);
-        set = 1;
+        cstat_set = 1;
     }
 
     /* assign to double x for conversion */
@@ -4577,6 +4492,23 @@ double gamdev(double alpha)
    normal cdf and inv cdf
  ************************************************* */
 
+/* Returns cdf of normal N(0,1) at x */
+double pnormC(double y) {
+  double cdf, surv;
+
+    if (y < -20.0) {
+      cdf= 2.753624e-89;
+    }
+    else if (y > 20.0) {
+      cdf= 1 - 2.753624e-89;
+    }
+    else {
+      cumnor(&y,&cdf,&surv);
+    }
+
+    return cdf;
+}
+
 /* Returns cdf of normal N(m,s^2) at x */
 double pnormC(double y, double m, double s) {
   double cdf, p, mean, sd, bound, x, z;
@@ -4605,6 +4537,65 @@ double pnormC(double y, double m, double s) {
     return cdf;
 }
 
+/* Normal cdf. Abramowitz and Stegun Approximation, p932, Expression 26.2.16, http://people.math.sfu.ca/~cbm/aands/frameindex.htm
+
+   For any y, max absolute error |pnorm(y) - apnorm(y)| <=1.15e-05
+
+   Unbounded relative error pnorm(z)/apnorm(z) as y --> -Inf; For any y>0 relative error in (0.99998,1.0000165)
+*/
+double apnorm(double y, bool logscale) {
+  double ans, a1= 0.4361836, a2= -0.1201676, a3= 0.9372980, p= 0.33267, t, t2;
+
+  if (y>=0) { //val= 1-dnorm(y)*(a1*t + a2*t^2 + a3*t^3)
+    t = 1/(1+p*y); t2= t*t;
+    ans= dnormC(y,1) + log(a1*t + a2*t2 + a3*t2*t);
+    if (logscale) { ans= log(1 - exp(ans)); } else { ans= 1 - exp(ans); }
+  } else {    //val= dnorm(y)*(a1*t + a2*t^2 + a3*t^3)
+    t = 1/(1+p*(-y)); t2= t*t;
+    ans= dnormC(y,1) + log(a1*t + a2*t2 + a3*t2*t);
+    if (!logscale) ans= exp(ans);
+  }
+  return ans;
+}
+
+/* Normal cdf. Combine Abrawomitz-Stegun's approx 26.2.16 for abs(x) < 5.874097 and asymptotic expansion 26.2.12 for abs(x)>= 5.874097
+
+   For any y, max absolute error |pnorm(y) - apnorm(y)| <=1.15e-05
+
+   For y<0 relative error pnorm(z)/apnorm(z) in (0.973232,1.0000165); For any y>0 relative error in (0.99998,1.0000165)
+*/
+double apnorm2(double y, bool logscale) {
+  double ans;
+  if (abs(y) < 5.874097) {
+    ans= apnorm(y,logscale);
+  } else {
+    if (y>=0) {
+      ans= dnormC(y,1) - log(y);
+      if (logscale) { ans= log(1-exp(ans)); } else { ans= 1-exp(ans); }
+    } else {
+      ans= dnormC(y,1) - log(-y);
+      if (!logscale) ans= exp(ans);
+    }
+  }
+  return ans;
+}
+
+
+
+/*
+ * Density of univariate Normal(0,1) evaluated at y.
+ * log==1 returns in log-scale.
+ */
+double dnormC(double y, int logscale) {
+    //assert((logscale == 0) || (logscale == 1));
+
+    if (logscale == 1) {
+      return(-log(SQ_M_PI_2) - 0.5 * y * y);
+    }
+    else {
+      return(exp(-0.5 * y * y) / SQ_M_PI_2);
+    }
+}
 
 
 /*
@@ -4650,11 +4641,14 @@ double dnormC_jvec(const double *y,
 
 /*
  * Density of multivariate Normal evaluated at y[1]...y[p].
- * mu is the mean. cholsinv and det are the Cholesky decomposition and the
- * determinant of the inverse covariance matrix.
+ * Input
+ * - mu: mean
+ * - cholsinv: Cholesky decomposition of the inverse covariance matrix.
+ * - det: if logdet==false, det is the determinant of the inverse covariance matrix. if logdet==true, det is the log of the determinant
+ * - If transpose==false then Sigma^{-1}= cholsinv * cholsinv', where cholsinv is lower-triangular
+ *   If transpose== true then Sigma^{-1}= cholsinv' * cholsinv, where cholsinv is lower-triangular
+ * - logscale: if logscale==1 the log of the density is returned
  *
- * //If transpose==false then Sigma^{-1}= cholsinv * cholsinv', where cholsinv is lower-triangular
- * //If transpose== true then Sigma^{-1}= cholsinv' * cholsinv, where cholsinv is lower-triangular
  * Example:
  *   choldc_inv(s,p,cholsinv,posdef);
  *   det= choldc_det(cholsinv,p);
@@ -4665,26 +4659,67 @@ double dnormC_jvec(const double *y,
  *   det= choldc_det(cholsinv,p);
  *   dmvnormC(y,p,mu,cholsinv,det,0,false);
  */
-double dmvnormC(const double *y, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale) {
+double dmvnormC(const double *y, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale, bool logdet=false) {
     int i;
-    double *z, *z2, res = 0.0, ans;
+    double *z, ans;
 
     z  = dvector(1, p);
-    z2 = dvector(1, p);
     for (i = 1; i <= p; i++) { z[i] = y[i] - mu[i]; }
-    if (transpose) {
-      Ax(cholsinv, z, z2, 1, p, 1, p);     /* Find (y-mu)' * cholsinv' * cholsinv * (y-mu) */
-    } else {
-      Atx(cholsinv, z, z2, 1, p, 1, p);     /* Find (y-mu)' * cholsinv * cholsinv' * (y-mu) */
-    }
-    for (i = 1; i <= p; i++) {
-        res += z2[i] * z2[i];
-    }
+    ans= dmvnorm0(z, p, cholsinv, det, transpose, true, logdet);
     free_dvector(z, 1, p);
+
+    return (logscale == 1) ? ans : exp(ans);
+}
+
+//same as dmvnorm for particular case mean=0
+double dmvnorm0(const double *y, int p, double **cholsinv, double det, bool transpose, int logscale, bool logdet=false) {
+  int i;
+  double *z2, res=0, ans;
+    z2 = dvector(1, p);
+    if (transpose) {
+      Ax(cholsinv, y, z2, 1, p, 1, p);     /* Find y' cholsinv' cholsinv y */
+    } else {
+      Atx(cholsinv, y, z2, 1, p, 1, p);    /* Find y' cholsinv cholsinv' y */
+    }
+    for (i = 1; i <= p; i++) res += z2[i] * z2[i];
     free_dvector(z2, 1, p);
 
-    ans = -p * log(SQ_M_PI_2) + 0.5 * log(det) - 0.5 * res;
+    if (logdet) {
+      ans = -p * log(SQ_M_PI_2) + 0.5 * det - 0.5 * res;
+    } else {
+      ans = -p * log(SQ_M_PI_2) + 0.5 * log(det) - 0.5 * res;
+    }
     return (logscale == 1) ? ans : exp(ans);
+}
+
+//same as dmvnorm for particular case mean=0
+double dmvnorm0(const double *y, int p, double *cholsinv, double det, int logscale, bool logdet=false) {
+  /* cholsinv stores Cholesky decomp of Sinv as a vector, following column order (1st column, 2nd column, etc).
+
+      Element (l,l) of chol(XtX) is stored into cholXtX[ll], where ll= (l-1)*n - (l-1)*(l-2)/2;
+
+      For l>m, element (l,m) of chol(XtX) is stored into  cholXtX[mm + l - m]. Remaining elements are all zero
+  */
+
+  int i, j, ii;
+  double *z2, res=0, ans;
+  z2 = dvector(1, p);
+
+  /* Find y' cholsinv cholsinv' y */
+  for (i=1; i<= p; i++) {
+    ii= (i-1)*p - (i-1)*(i-2)/2;
+    for (j=i, z2[i]=0; j<=p; j++) { z2[i] += cholsinv[ii+j-i] * y[j]; } //z2[i] += cholsinv[j][i] * y[j]; (only for j<=i)
+  }
+
+  for (i = 1; i <= p; i++) res += z2[i] * z2[i];
+  free_dvector(z2, 1, p);
+
+  if (logdet) {
+    ans = -p * log(SQ_M_PI_2) + 0.5 * det - 0.5 * res;
+  } else {
+    ans = -p * log(SQ_M_PI_2) + 0.5 * log(det) - 0.5 * res;
+  }
+  return (logscale == 1) ? ans : exp(ans);
 }
 
 
@@ -5024,7 +5059,7 @@ void rnorm_truncMult(double *y, double *pdfy, int *n, double *ltrunc, double *rt
 SEXP rnorm_truncMultCI(SEXP n, SEXP ltrunc, SEXP rtrunc, SEXP m, SEXP s) {
   double pdfans;
   SEXP ans;
-  PROTECT(ans= allocVector(REALSXP,INTEGER(n)[0]));
+  PROTECT(ans= Rf_allocVector(REALSXP,INTEGER(n)[0]));
   rnorm_truncMult(REAL(ans),&pdfans,INTEGER(n),REAL(ltrunc),REAL(rtrunc),LENGTH(ltrunc),REAL(m),REAL(s));
   UNPROTECT(1);
   return ans;
@@ -5086,7 +5121,7 @@ SEXP rtmvnormCI(SEXP n, SEXP mu, SEXP Sigma, SEXP lower, SEXP upper, SEXP within
     for (j=1; j<i; j++) S[i][j]= S[j][i]= REAL(Sigma)[ip+j-1];
   }
 
-  PROTECT(ans= allocVector(REALSXP,INTEGER(n)[0]*p));
+  PROTECT(ans= Rf_allocVector(REALSXP,INTEGER(n)[0]*p));
   rtmvnorm(REAL(ans), INTEGER(n)[0], p, REAL(mu)-1, S, REAL(lower)-1, REAL(upper)-1, INTEGER(within)[0], INTEGER(method)[0]);
   free_dmatrix(S,1,p,1,p);
   UNPROTECT(1);
@@ -5372,7 +5407,7 @@ SEXP rtmvnormProdCI(SEXP n, SEXP mu, SEXP Sigma, SEXP k, SEXP lower, SEXP upper,
   free_dmatrix(S,1,p,1,p);
 
   SEXP ans;
-  PROTECT(ans= allocVector(REALSXP, nn*p));
+  PROTECT(ans= Rf_allocVector(REALSXP, nn*p));
   rtmvnormProd(REAL(ans), nn, p, REAL(mu)-1, Sinv, INTEGER(k)[0], REAL(lower)[0], REAL(upper)[0], INTEGER(is_low_trunc)[0], INTEGER(is_up_trunc)[0], INTEGER(burnin)[0]);
 
   free_dmatrix(Sinv,1,p,1,p);
@@ -5568,12 +5603,22 @@ void rmvnormC(double *y,
 }
 
 
+//Mill's ratio (1-pnorm(z))/dnorm(z)
+double millsnorm(double z) {
+  return (1.0 - pnormC(z)) / dnormC(z,0);
+}
+
+//Inverse Mill's ratio dnorm(z)/pnorm(z)
+double invmillsnorm(double z) {
+  return dnormC(z,0) / pnormC(z);
+}
+
 
  //Raw moment of N(m,sd) of order "order"
 SEXP mnormCI(SEXP order, SEXP m, SEXP sd) {
   SEXP ans;
 
-  ans= PROTECT(allocVector(REALSXP, 1));
+  ans= PROTECT(Rf_allocVector(REALSXP, 1));
   REAL(ans)[0]= mnorm(REAL(order)[0], REAL(m)[0], REAL(sd)[0]);
   UNPROTECT(1);
   return ans;
@@ -6506,7 +6551,7 @@ SEXP rnlpPostCI_lm(SEXP niter, SEXP burnin, SEXP thinning, SEXP y, SEXP x, SEXP 
   int n= LENGTH(y), nsave;
   SEXP ans;
   nsave= (int) (floor(INTEGER(niter)[0] - INTEGER(burnin)[0] +.0)/(INTEGER(thinning)[0] +.0));
-  ans= PROTECT(allocVector(REALSXP, nsave * (INTEGER(p)[0]+1)));
+  ans= PROTECT(Rf_allocVector(REALSXP, nsave * (INTEGER(p)[0]+1)));
   rnlpPost_lm(REAL(ans), INTEGER(niter)[0], INTEGER(burnin)[0], INTEGER(thinning)[0], REAL(y), REAL(x), n, INTEGER(p)[0], INTEGER(r)[0], REAL(tau)[0], REAL(a_phi)[0], REAL(b_phi)[0], INTEGER(prior)[0]);
   UNPROTECT(1);
   return ans;
@@ -6642,7 +6687,7 @@ SEXP rnlpCI(SEXP niter, SEXP burnin, SEXP thinning, SEXP m, SEXP V, SEXP p, SEXP
   int nsave;
   SEXP ans;
   nsave= (int) (floor(INTEGER(niter)[0] - INTEGER(burnin)[0] +.0)/(INTEGER(thinning)[0] +.0));
-  ans= PROTECT(allocVector(REALSXP, nsave * (INTEGER(p)[0])));
+  ans= PROTECT(Rf_allocVector(REALSXP, nsave * (INTEGER(p)[0])));
   rnlp(REAL(ans), INTEGER(niter)[0], INTEGER(burnin)[0], INTEGER(thinning)[0], REAL(m), REAL(V), INTEGER(p)[0], INTEGER(r)[0], REAL(tau)[0], INTEGER(prior)[0]);
   UNPROTECT(1);
   return ans;

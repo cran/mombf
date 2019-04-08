@@ -1,9 +1,45 @@
 ### R code from vignette source 'mombf.Rnw'
 
 ###################################################
-### code chunk number 1: priorplota
+### code chunk number 1: quickstart
 ###################################################
- library(mombf)
+library(mombf)
+set.seed(1234)
+x <- matrix(rnorm(100*3),nrow=100,ncol=3)
+theta <- matrix(c(1,1,0),ncol=1)
+y <- x %*% theta + rnorm(100)
+
+#Default MOM prior on parameters
+priorCoef <- momprior(tau=0.348)
+
+#Beta-Binomial prior for model space
+priorDelta <- modelbbprior(1,1)
+
+#Model selection
+fit1 <- modelSelection(y ~ x[,1]+x[,2]+x[,3], priorCoef=priorCoef, priorDelta=priorDelta)
+
+#Posterior model probabilities
+postProb(fit1)
+
+#BMA estimates, 95% intervals, marginal post prob
+coef(fit1)
+
+#BMA predictions for y, 95% intervals
+ypred= predict(fit1)
+head(ypred)
+cor(y, ypred[,1])
+
+
+###################################################
+### code chunk number 2: priorp2g
+###################################################
+priorp2g(.01, q=.2, prior='normalMom')
+2*pmom(-.2, tau=0.3483356)
+
+
+###################################################
+### code chunk number 3: priorplota
+###################################################
  thseq <- seq(-3,3,length=1000)
  plot(thseq,dnorm(thseq),type='l',ylab='Prior density')
  lines(thseq,dt(thseq,df=1),lty=2,col=2)
@@ -11,7 +47,7 @@
 
 
 ###################################################
-### code chunk number 2: priorplotb
+### code chunk number 4: priorplotb
 ###################################################
  thseq <- seq(-3,3,length=1000)
  plot(thseq,dmom(thseq,tau=.348),type='l',ylab='Prior density',ylim=c(0,1.2))
@@ -21,9 +57,8 @@
 
 
 ###################################################
-### code chunk number 3: fpriorplota
+### code chunk number 5: fpriorplota
 ###################################################
- library(mombf)
  thseq <- seq(-3,3,length=1000)
  plot(thseq,dnorm(thseq),type='l',ylab='Prior density')
  lines(thseq,dt(thseq,df=1),lty=2,col=2)
@@ -31,7 +66,7 @@
 
 
 ###################################################
-### code chunk number 4: fpriorplotb
+### code chunk number 6: fpriorplotb
 ###################################################
  thseq <- seq(-3,3,length=1000)
  plot(thseq,dmom(thseq,tau=.348),type='l',ylab='Prior density',ylim=c(0,1.2))
@@ -41,17 +76,7 @@
 
 
 ###################################################
-### code chunk number 5: two
-###################################################
-prior.mode <- .4^2
-taumom <- mode2g(prior.mode,prior='normalMom')
-tauimom <- mode2g(prior.mode,prior='iMom')
-taumom
-tauimom
-
-
-###################################################
-### code chunk number 6: varsel1
+### code chunk number 7: varsel1
 ###################################################
 set.seed(2011*01*18)
 x <- matrix(rnorm(100*3),nrow=100,ncol=3)
@@ -60,15 +85,15 @@ y <- x %*% theta + rnorm(100)
 
 
 ###################################################
-### code chunk number 7: varsel2
+### code chunk number 8: varsel2
 ###################################################
-priorCoef <- imomprior(tau=.131)
+priorCoef <- imomprior(tau=.133)
 priorDelta <- modelbbprior(alpha.p=1,beta.p=1)
 priorVar <- igprior(.01,.01)
 
 
 ###################################################
-### code chunk number 8: varsel3
+### code chunk number 9: varsel3
 ###################################################
 fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE,
 priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar)
@@ -86,7 +111,7 @@ postProb(fit2,method='exact')
 
 
 ###################################################
-### code chunk number 9: varsel4
+### code chunk number 10: varsel4
 ###################################################
 priorCoef <- zellnerprior(tau=nrow(x))
 fit3 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE, niter=10^2,
@@ -96,17 +121,17 @@ postProb(fit3)
 
 
 ###################################################
-### code chunk number 10: varsel5
+### code chunk number 11: varsel5
 ###################################################
-priorCoef <- imomprior(tau=.131)
+priorCoef <- imomprior(tau=.133)
 fit4 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE,
 priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar,
-priorSkew=imomprior(tau=.131),family='auto')
+priorSkew=imomprior(tau=.133),family='auto')
 head(postProb(fit4))
 
 
 ###################################################
-### code chunk number 11: haldlm
+### code chunk number 12: haldlm
 ###################################################
 data(hald)
 dim(hald)
@@ -117,27 +142,29 @@ diag(V)
 
 
 ###################################################
-### code chunk number 12: three
+### code chunk number 13: three
 ###################################################
-mombf(lm1,coef=2,g=taumom)
-imombf(lm1,coef=2,g=tauimom,method='adapt')
-imombf(lm1,coef=2,g=tauimom,method='MC',B=10^5)
+mombf(lm1,coef=2,g=0.348)
+imombf(lm1,coef=2,g=.133,method='adapt')
+imombf(lm1,coef=2,g=.133,method='MC',B=10^5)
 
 
 ###################################################
-### code chunk number 13: rnlp
+### code chunk number 14: rnlp
 ###################################################
 priorCoef <- momprior(tau=.348)
 priorDelta <- modelbbprior(alpha.p=1,beta.p=1)
 fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE,
 priorCoef=priorCoef, priorDelta=priorDelta)
-th <- rnlp(y=as.numeric(y),x=x,msfit=fit1,priorCoef=priorCoef,niter=10000)
+b <- coef(fit1)
+head(b)
+th <- rnlp(msfit=fit1,priorCoef=priorCoef,niter=10000)
 colMeans(th)
 head(th)
 
 
 ###################################################
-### code chunk number 14: rnlp
+### code chunk number 15: rnlp
 ###################################################
 model <- apply(th!=0,1,function(z) paste(which(z),collapse=','))
 table(model)
@@ -146,7 +173,7 @@ colMeans(th[model=='1,2,3,4',])
 
 
 ###################################################
-### code chunk number 15: rnlponemodel
+### code chunk number 16: rnlponemodel
 ###################################################
 tau= 0.348
 shrinkage= nrow(x)*tau/(1+nrow(x)*tau)
@@ -158,7 +185,7 @@ colMeans(th)
 
 
 ###################################################
-### code chunk number 16: bmsortho
+### code chunk number 17: bmsortho
 ###################################################
 set.seed(1)
 p <- 200; n <- 210
@@ -184,7 +211,7 @@ head(pm.mom$models)
 
 
 ###################################################
-### code chunk number 17: bmsorthopp
+### code chunk number 18: bmsorthopp
 ###################################################
 par(mar=c(5,5,1,1))
 nvars <- sapply(strsplit(as.character(pm.zell$models$modelid),split=','),length)
@@ -200,7 +227,7 @@ legend('topright',c('Zellner','MOM'),pch=c(1,17),col=c('black','gray'),cex=1.5)
 
 
 ###################################################
-### code chunk number 18: bmaortho
+### code chunk number 19: bmaortho
 ###################################################
 par(mar=c(5,5,1,1))
 ols <- (t(x) %*% y) / colSums(x^2)
@@ -211,7 +238,7 @@ legend('topleft',c('Zellner','MOM'),pch=c(1,3),col=c('black','darkgray'))
 
 
 ###################################################
-### code chunk number 19: bmsorthopp
+### code chunk number 20: bmsorthopp
 ###################################################
 par(mar=c(5,5,1,1))
 nvars <- sapply(strsplit(as.character(pm.zell$models$modelid),split=','),length)
@@ -227,7 +254,7 @@ legend('topright',c('Zellner','MOM'),pch=c(1,17),col=c('black','gray'),cex=1.5)
 
 
 ###################################################
-### code chunk number 20: bmaortho
+### code chunk number 21: bmaortho
 ###################################################
 par(mar=c(5,5,1,1))
 ols <- (t(x) %*% y) / colSums(x^2)
@@ -238,7 +265,7 @@ legend('topleft',c('Zellner','MOM'),pch=c(1,3),col=c('black','darkgray'))
 
 
 ###################################################
-### code chunk number 21: bmsblockdiag1
+### code chunk number 22: bmsblockdiag1
 ###################################################
 set.seed(1)
 p <- 100; n <- 110
@@ -261,7 +288,7 @@ y <- x %*% matrix(th,ncol=1) + rnorm(n,sd=sqrt(phi))
 
 
 ###################################################
-### code chunk number 22: bmsblockdiag2
+### code chunk number 23: bmsblockdiag2
 ###################################################
 priorCoef=zellnerprior(tau=n)
 priorDelta=modelbinomprior(p=1/p)
@@ -271,22 +298,6 @@ priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
 
 head(pm$models)
 head(pm$postmean.model)
-
-
-###################################################
-### code chunk number 23: coolblock
-###################################################
-maxvars=50
-ylim=range(pm$postmean.model[,-1])
-plot(NA,NA,xlab='Model size',
-  ylab='Posterior mean given model',
-  xlim=c(0,maxvars),ylim=ylim,cex.lab=1.5)
-visited <- which(!is.na(pm$models$pp))
-for (i in 2:ncol(pm$postmean.model)) {
-  lines(pm$models$nvars[visited],pm$postmean.model[visited,i])
-}
-text(maxvars, pm$postmean.model[maxvars,which(th!=0)+1],
-paste('X',which(th!=0),sep=''), pos=3)
 
 
 ###################################################
@@ -306,7 +317,23 @@ paste('X',which(th!=0),sep=''), pos=3)
 
 
 ###################################################
-### code chunk number 25: six
+### code chunk number 25: coolblock
+###################################################
+maxvars=50
+ylim=range(pm$postmean.model[,-1])
+plot(NA,NA,xlab='Model size',
+  ylab='Posterior mean given model',
+  xlim=c(0,maxvars),ylim=ylim,cex.lab=1.5)
+visited <- which(!is.na(pm$models$pp))
+for (i in 2:ncol(pm$postmean.model)) {
+  lines(pm$models$nvars[visited],pm$postmean.model[visited,i])
+}
+text(maxvars, pm$postmean.model[maxvars,which(th!=0)+1],
+paste('X',which(th!=0),sep=''), pos=3)
+
+
+###################################################
+### code chunk number 26: six
 ###################################################
 set.seed(4*2*2008)
 n <- 50; theta <- c(log(2),0)
@@ -317,7 +344,7 @@ y <- rbinom(n,1,p)
 
 
 ###################################################
-### code chunk number 26: pmomLM
+### code chunk number 27: pmomLM
 ###################################################
 th <- pmomLM(y=y,x=x,xadj=rep(1,n),niter=10000)
 head(th$postModel)
@@ -325,7 +352,7 @@ table(apply(th$postModel,1,paste,collapse=','))
 
 
 ###################################################
-### code chunk number 27: seven
+### code chunk number 28: seven
 ###################################################
 glm1 <- glm(y~x[,1]+x[,2],family=binomial(link = "probit"))
 thetahat <- coef(glm1)
@@ -338,7 +365,7 @@ bfimom.1
 
 
 ###################################################
-### code chunk number 28: nine
+### code chunk number 29: nine
 ###################################################
 bfmom.2 <- momknown(thetahat[3],V[3,3],n=n,g=g,sigma=1)
 bfimom.2 <- imomknown(thetahat[3],V[3,3],n=n,nuisance.theta=2,g=g,sigma=1)
@@ -347,7 +374,7 @@ bfimom.2
 
 
 ###################################################
-### code chunk number 29: ten
+### code chunk number 30: ten
 ###################################################
 bfmom.0 <- momknown(thetahat[2:3],V[2:3,2:3],n=n,g=g,sigma=1)
 bfimom.0 <- imomknown(thetahat[2:3],V[2:3,2:3],n=n,nuisance.theta=2,g=g,sigma=1)
@@ -356,7 +383,7 @@ bfimom.0
 
 
 ###################################################
-### code chunk number 30: eleven
+### code chunk number 31: eleven
 ###################################################
 prior.prob <- rep(1/4,4)
 bf <- c(bfmom.0,bfmom.1,bfmom.2,1)
@@ -365,7 +392,7 @@ pos.prob
 
 
 ###################################################
-### code chunk number 31: mixtures1
+### code chunk number 32: mixtures1
 ###################################################
 set.seed(1)
 n=200; k=1:3
@@ -373,14 +400,14 @@ x= rnorm(n)
 
 
 ###################################################
-### code chunk number 32: mixtures2
+### code chunk number 33: mixtures2
 ###################################################
 fit= bfnormmix(x=x,k=k,q=3,q.niw=1,B=10^4)
 postProb(fit)
 
 
 ###################################################
-### code chunk number 33: mixturesNIW
+### code chunk number 34: mixturesNIW
 ###################################################
 mcmcout= postSamples(fit)
 names(mcmcout)
@@ -393,7 +420,7 @@ parest[[2]]
 
 
 ###################################################
-### code chunk number 34: mixturesMOMIW
+### code chunk number 35: mixturesMOMIW
 ###################################################
 w= postSamples(fit)[[2]]$momiw.weight
 apply(mcmcout[[2]]$eta, 2, weighted.mean, w=w)
@@ -401,7 +428,7 @@ apply(mcmcout[[2]]$mu, 2, weighted.mean, w=w)
 
 
 ###################################################
-### code chunk number 35: mixture2comp
+### code chunk number 36: mixture2comp
 ###################################################
 set.seed(1)
 n=200; k=1:3; probs= c(1/2,1/2)

@@ -47,10 +47,7 @@ valid_msPriorSpec <- function(object) {
     ## Validate rest based on type
     switch(object@priorType,
            coefficients = {
-               valid_coef_prior_distrs <- c("pMOM",
-                                            "piMOM",
-                                            "peMOM",
-                                            "zellner")
+               valid_coef_prior_distrs <- c("pMOM","piMOM","peMOM","zellner","groupzellner")
                found <- object@priorDistr %in% valid_coef_prior_distrs
                if (!found) {
                    msg <- c(msg,
@@ -70,9 +67,7 @@ valid_msPriorSpec <- function(object) {
                                         sQuote("pMOM")))
                    }
                }
-               reqd_prior_pars <- c("tau",
-                                    "a.tau",
-                                    "b.tau")
+               reqd_prior_pars <- c("tau","a.tau","b.tau")
                found <- has_either_or(reqd_prior_pars[1],
                                       reqd_prior_pars[-1],
                                       names(object@priorPars))
@@ -199,6 +194,23 @@ emomprior <- function(tau, tau.adj=10^6) {
 zellnerprior <- function(tau, tau.adj=10^6) {
     new("msPriorSpec", priorType="coefficients", priorDistr="zellner", priorPars=c(tau=tau, tau.adj=tau.adj))
 }
+
+groupmomprior <- function(tau, tau.adj=10^6) {
+    new("msPriorSpec", priorType="coefficients", priorDistr="groupMOM", priorPars=c(tau=tau,tau.adj=tau.adj))
+}
+
+groupimomprior <- function(tau, tau.adj=10^6) {
+    new("msPriorSpec", priorType="coefficients", priorDistr="groupiMOM", priorPars=c(tau=tau, tau.adj=tau.adj))
+}
+
+groupemomprior <- function(tau, tau.adj=10^6) {
+    new("msPriorSpec", priorType="coefficients", priorDistr="groupeMOM", priorPars=c(tau=tau, tau.adj=tau.adj))
+}
+
+groupzellnerprior <- function(tau, tau.adj=10^6) {
+    new("msPriorSpec", priorType="coefficients", priorDistr="groupzellner", priorPars=c(tau=tau, tau.adj=tau.adj))
+}
+
 
 modelunifprior <- function() {
     new("msPriorSpec",priorType='modelIndicator',priorDistr='uniform',priorPars=double(0))

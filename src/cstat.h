@@ -7,9 +7,18 @@
 #ifndef CSTAT_H
 #define CSTAT_H 1
 
+// we only include RcppArmadillo.h which pulls Rcpp.h in for us
+#include "RcppArmadillo.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include "crossprodmat.h"
+//#include <R.h>
+//#include <Rinternals.h>
 
 
 #if !defined(M_PI)
@@ -200,8 +209,8 @@ void Atvecx(const double *A, const double *x, double *z, int rowini, int rowfi, 
 double xtAy(const double *x, double **A, const double *y, int ini, int fi); //t(vector)*matrix*vector
 
 double quadratic_xtAx(const double *x, double **A, int ini, int fi); //t(vector)*matrix*vector for quadratic forms (A symmetric)
-double quadratic_xseltAselxsel(const double *x, const double *A, const int *ncol, const int *nsel, const int *sel); // same but A is formatted as vector & only a subset of x, A is to be used
-double quadratic_xtAselx(const double *x, const double *A, const int *ncolA, const int *nsel, const int *sel); //same but subset is only for A
+double quadratic_xseltAselxsel(const double *x, crossprodmat *A, const int *ncol, const int *nsel, const int *sel); // same but A is formatted as vector & only a subset of x, A is to be used
+double quadratic_xtAselx(const double *x, crossprodmat *A, const int *ncolA, const int *nsel, const int *sel); //same but subset is only for A
 double quadratic_xseltAxsel(const double *x, double **A, int ini, const int *nsel, const int *sel); //same but subset is only for x
 
 void Atx(double **A, const double *x, double *z, int rowini, int rowfi, int colini, int colfi); //t(matrix)*vector
@@ -229,6 +238,7 @@ void choldc_inv(double **a, int n, double **aout, bool *posdef); //Inverse of ch
 void cholS_inv(double **cholS, int n, double **cholSinv); //Inverse of cholS
 void choldc_inv_internal(double **cholS, int n);
 double choldc_det(double **chols, int n); //Determinant of a symmetric def+ using its Cholesky decomp
+double logcholdc_det(double **chols, int n); //log-determinant of a symmetric def+ using its Cholesky decomp
 void inv_posdef(double **a, int n, double **aout, bool *posdef); //Inverse of a symmetric, positive definite matrix
 void inv_posdef_upper(double **a, int n, double **aout, bool *posdef); //Same but only returns upper triangular elements
 void invdet_posdef(double **a, int n, double **aout, double *det_a); //Inverse and determinant of positive def matrix
@@ -287,15 +297,23 @@ void rdirichlet(double *w, const double *alpha, const int *p);
 double ddirichlet(const double *w, double *alpha, const int *p); //Dirichlet density
 
 // Normal
+double dnormC(double y, int logscale);
 double dnormC(double y, double m, double s, int logscale); //density of Normal(m,s^2)
 double dnormC_jvec(const double *y, int n, double m, double s, int logscale); //joint density of y[0]...y[n-1] under Normal(m,s^2), i.e. returns scalar
-double dmvnormC(const double *y, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale); //density of multivariate Normal
+double dmvnormC(const double *y, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale, bool logdet); //density of multivariate Normal
+double dmvnorm0(const double *y, int p, double **cholsinv, double det, bool transpose, int logscale, bool logdet); //same for particular case mean=0
+double dmvnorm0(const double *y, int p, double *cholsinv, double det, int logscale, bool logdet); //same for particular case mean=0, cholsinv given as vector
 void dmvnormmatC(double *ans, const double *y, int n, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale); //same but y is n x p matrix
 void dmvnormmat_transC(double *ans, const double *ty, int n, int p, const double *mu, double **cholsinv, double det, bool transpose, int logscale); //same but t(y) is provided
 double	qnormC(double cdf, double m, double s);  //quantile from Normal(m,s^2)
+double pnormC(double y); //cdf of Normal(0,1)
 double	pnormC(double y, double m, double s);  //cdf of Normal(m,s^2)
+double apnorm(double y, bool logscale); //approx N(0,1) cdf (Abrawomitz-Stegun, 26.2.16)
+double apnorm2(double y, bool logscale); //improved approx combining Abrawomitz-Stegun 26.2.16 & 26.2.12
 double rnormC(double mu, double s); //draw from univariate Normal(mu,s^2)
 void rmvnormC(double *y, int n, const double *mu, double **chols); //draw from multivariate Normal
+double millsnorm(double z); //Mill's ratio (1-pnorm(z))/dnorm(z)
+double invmillsnorm(double z); //Inverse Mill's ratio dnorm(z)/pnorm(z)
 
 // Truncated Normal
 double rnorm_trunc(double ltrunc, double rtrunc, double m, double s); //draw trunc Normal given two truncation points

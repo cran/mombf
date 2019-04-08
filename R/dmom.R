@@ -25,14 +25,18 @@ dmom <- function(x, tau, a.tau, b.tau, phi=1, r=1, V1, baseDensity='normal', nu=
 ##Product MOM density
 
 setMethod("dpmom", signature(x='vector'), function(x, tau, a.tau, b.tau, phi=1, r=1, baseDensity='normal', logscale=FALSE) {
-  if (baseDensity!='normal') stop("Only baseDensity=='normal' is implemented for the product MOM")
-  if (missing(tau) & (missing(a.tau) | missing(b.tau))) stop("Either tau or (a.tau,b.tau) must be specified")
-  if (!missing(tau)) {
-    ans <- dnorm(x,0,sd=sqrt(tau*phi),log=TRUE) + r*log(x^2/(tau*phi)) - sum(log(seq(1,2*r-1,by=2)))
-  } else {
-    ct <- lgamma(r+.5*(a.tau+1)) + r*log(2) - lgamma(.5*a.tau) - .5*log(pi) - (r+.5)*log(b.tau) - .5*log(phi)
-    ans <- ct + r*log(x^2/phi) - sum(log(seq(1,2*r-1,by=2))) - (r+.5*(a.tau+1))*log(1+x^2/(b.tau*phi))
-  }
+    if (missing(tau) & (missing(a.tau) | missing(b.tau))) stop("Either tau or (a.tau,b.tau) must be specified")
+    if (baseDensity=='normal') {
+        if (!missing(tau)) {
+            ans <- dnorm(x,0,sd=sqrt(tau*phi),log=TRUE) + r*log(x^2/(tau*phi)) - sum(log(seq(1,2*r-1,by=2)))
+        } else {
+            ct <- lgamma(r+.5*(a.tau+1)) + r*log(2) - lgamma(.5*a.tau) - .5*log(pi) - (r+.5)*log(b.tau) - .5*log(phi)
+            ans <- ct + r*log(x^2/phi) - sum(log(seq(1,2*r-1,by=2))) - (r+.5*(a.tau+1))*log(1+x^2/(b.tau*phi))
+        }
+    } else if (baseDensity=='laplace') {
+        if (r!=1) stop("Only r=1 is implemented for baseDensity='normal'")
+        ans= log(x^2) + dalapl(x,0,scale=tau*phi,logscale=TRUE) - log(2*tau*phi)
+    } else { stop("Only baseDensity=='normal' or 'laplace' is implemented for the product MOM") }
   if (!logscale) ans <- exp(ans)
   ans
 }
@@ -345,3 +349,104 @@ priorp2g <- function(priorp,
          })
 }
 
+
+
+
+##############################################################################################
+## MARGINAL NLP * IG PRIORS
+##############################################################################################
+
+
+dmomigmarg= function(x,tau,a,b,logscale=FALSE) {
+#Marginal MOM density p(x)= int MOM(x;0,tau*phi) IG(phi;a/2,b/2) dphi
+    ans= log(2) + lgamma((a+3)/2) - 0.5*log(pi) - 1.5*log(b*tau) - lgamma(a/2) + log(x^2) - ((a+3)/2) * log(1 + x^2/(b*tau))
+    if (!logscale) ans= exp(ans)
+    return(ans)
+}
+
+#Marginal MOM cdf 
+pmomigmarg= function(x,tau,a,b) { integrate(dmomigmarg,-Inf,x,tau=tau,a=a,b=b)$value }
+
+
+
+#Marginal eMOM density p(x)= int eMOM(x;0,tau*phi) IG(phi;a/2,b/2) dphi
+demomigmarg= function(x,tau,a,b,logscale=FALSE) {
+    apos= (a+1)/2; bpos= (b+x^2/tau)/2
+    ans= log(mgfIG(-tau/x^2,apos,bpos))
+    ans= ans + sqrt(2) + lgamma((a+1)/2) - lgamma(a/2) - 0.5*log(pi*tau*b) - 0.5*(a+1) * log(1+x^2/(tau*b))
+    if (!logscale) ans= exp(ans)
+    return(ans)
+}
+
+#Marginal MOM cdf 
+pemomigmarg= function(x,tau,a,b) { integrate(demomigmarg,-Inf,x,tau=tau,a=a,b=b)$value }
+
+
+#Moment-generating function of IG(a,b) evaluated at t
+mgfIG= function(t,a,b) {
+    if (length(a)==1) a= rep(a,length(t))
+    if (length(b)==1) b= rep(b,length(t))
+    ans= double(length(t))
+    for (i in 1:length(t)) {
+        f= function(x) { exp(t[i] * x) * dinvgamma(x,a[i],b[i]) }
+        ans[i]= integrate(f,0,Inf)$value
+    }
+    return(ans)
+}
+
+
+
+minbeta2tauMOMIGmarg= function(minbeta,a=3,b=3,targetprob=0.99) {
+#Find tau such that P(|x| > minbeta)= targetprob, where p(x) is the MOM-IG marginal
+    if (minbeta<0) stop("minbeta must be >0")
+    f= function(z) abs(targetprob - 2*pmomigmarg(-minbeta,tau=z,a=a,b=b))
+    optimize(f,interval=c(.01,5))$minimum
+}
+
+
+minbeta2taueMOMIGmarg= function(minbeta,a=3,b=3,targetprob=0.99) {
+#Find tau such that P(|x| > minbeta)= targetprob, where p(x) is the MOM-IG marginal
+    if (minbeta<0) stop("minbeta must be >0")
+    f= function(z) abs(targetprob - 2*pemomigmarg(-minbeta,tau=z,a=a,b=b))
+    tauseq= c(seq(.01,.3,length=10),seq(.4,2,by=.1))
+    fseq= sapply(tauseq, f)
+    o= order(fseq)
+    optimize(f,interval=tauseq[o[1:2]])$minimum
+}
+
+
+
+##############################################################################################
+## CONTINUOUS SPIKE & SLAB PRIORS
+##############################################################################################
+
+
+dmomss= function(x,tau0,tau1,pspike=0.5,baseDensity="normal",logscale=FALSE) {
+#Spike & Slab MOM prior
+# (1-pspike) * p(x; 0,tau0) + pspike * (x^2/c) * p(x; 0,tau1), where p(x;0,tauj) is Normal for baseDensity="normal" and Laplace for baseDensity="laplace" and c the MOM normalization constant
+    if (baseDensity=="normal") {
+        d0= dnorm(x,0,tau0,log=TRUE) + log(1-pspike)
+        d1= dmom(x,tau=tau1,phi=1,baseDensity="normal",logscale=TRUE) + log(pspike)
+    } else if (baseDensity=="laplace") {
+        d0= dalapl(x,0,scale=tau0,logscale=TRUE) + log(1-pspike)
+        d1= dmom(x,tau=tau1,baseDensity="laplace",logscale=TRUE) + log(pspike)
+    }
+    ans= exp(d0) + exp(d1)
+    if (logscale) ans= log(ans)
+    return(ans)       
+}
+
+dss= function(x,tau0,tau1,pspike=0.5,baseDensity="normal",logscale=FALSE) {
+#Spike & Slab prior
+# (1-pspike) * p(x; 0,tau0) + pspike * p(x; 0,tau1), where p(x;0,tauj) is Normal for baseDensity="normal" and Laplace for baseDensity="laplace"
+    if (baseDensity=="normal") {
+        d0= dnorm(x,0,tau0,log=TRUE) + log(1-pspike)
+        d1= dnorm(x,0,tau1,log=TRUE) + log(pspike)
+    } else if (baseDensity=="laplace") {
+        d0= dalapl(x,0,scale=tau0,logscale=TRUE) + log(1-pspike)
+        d1= dalapl(x,0,scale=tau1,logscale=TRUE) + log(pspike)
+    }
+    ans= exp(d0) + exp(d1)
+    if (logscale) ans= log(ans)
+    return(ans)       
+}

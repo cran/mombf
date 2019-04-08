@@ -16,17 +16,17 @@
   probability model using an iterative block search.
 }
 \usage{
-modelSelection(y, x, center=TRUE, scale=TRUE,
-enumerate= ifelse(ncol(x)<15,TRUE,FALSE),
-includevars=rep(FALSE,ncol(x)),
-maxvars= ncol(x),
-niter=10^4, thinning=1,
-burnin=round(niter/10), family='normal', priorCoef=momprior(tau=0.348),
-priorDelta=modelbbprior(alpha.p=1,beta.p=1),
-priorVar=igprior(alpha=.01,lambda=.01),
+modelSelection(y, x, data, smoothterms, nknots=14,
+groups=1:ncol(x), constraints, center=TRUE, scale=TRUE,
+enumerate, includevars=rep(FALSE,ncol(x)),
+maxvars, niter=10^4, thinning=1,
+burnin=round(niter/10), family='normal', priorCoef,
+priorGroup, priorDelta=modelbbprior(1,1),
+priorConstraints=priorDelta,
+priorVar=igprior(.01,.01),
 priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)),
 initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA',
-B=10^5, verbose=TRUE)
+B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE)
 
 modelsearchBlockDiag(y, x, priorCoef=momprior(tau=0.348),
 priorDelta=modelbbprior(1,1), priorVar=igprior(0.01,0.01),
@@ -34,18 +34,41 @@ blocksize=10, maxiter=10, maxvars=100, maxlogmargdrop=20,
 maxenum=10, verbose=TRUE)
 }
 \arguments{
-\item{y}{Vector with observed responses}
-\item{x}{Design matrix with all potential predictors}
-\item{center}{If \code{TRUE}, \code{y} and \code{x} are centered to have zero mean, therefore eliminating the need to include an intercept term in x}
+\item{y}{Either a formula with the regression equation or a vector with
+  observed responses. The response can be either continuous or of class
+  \code{Surv} (survival outcome). If \code{y} is a formula then \code{x},
+  \code{groups} and \code{constraints} are automatically created}
+\item{x}{Design matrix with linear covariates for which we want to
+  assess if they have a linear effect on the response. Ignored if
+  \code{y} is a formula}
+\item{data}{If \code{y} is a formula then \code{data} should be a data
+  frame containing the variables in the model}
+\item{smoothterms}{Formula for non-linear covariates (cubic splines),
+  modelSelection assesses if the variable has no effect, linear or
+  non-linear effect. \code{smoothterms} can also be a design matrix or
+  data.frame containing linear terms, for each column modelSelection
+  creates a spline basis and tests no/linear/non-linear effects}
+\item{nknots}{Number of spline knots. For cubic splines the non-linear
+  basis adds knots-4 coefficients for each linear term, we recommend
+  setting \code{nknots} to a small/moderate value}
+\item{groups}{If variables in \code{x} such be added/dropped in groups,
+  \code{groups} indicates the group that each variable corresponds to
+  (by default each variable goes in a separate group)}
+\item{constraints}{Constraints on the model space. List with length
+  equal to the number of groups;
+  if group[[i]]=c(j,k) then group i can only be in the model if groups j and k are also in the model}
+\item{center}{If \code{TRUE}, \code{y} and \code{x} are centered to have
+  zero mean. Dummy variables corresponding to factors are NOT centered}
 \item{scale}{If \code{TRUE}, \code{y} and columns in \code{x} are
-  scaled to have standard deviation1}
-\item{enumerate}{If \code{TRUE} all models with up to \code{maxvars} are
+  scaled to have variance=1. Dummy variables corresponding to factors are NOT scaled}
+\item{enumerate}{Default is \code{TRUE} if there's less than 15 variable
+  groups. If \code{TRUE} all models with up to \code{maxvars} are
   enumerated, else Gibbs sampling is used to explore the model space}
 \item{includevars}{Logical vector of length ncol(x) indicating variables
 that should always be included in the model, i.e. variable selection is
 not performed for these variables}
 \item{maxvars}{When \code{enumerate==TRUE} only models with up to maxvars variables
-  enumerated. In \code{modelsearchBlockDiag} a sequence of models
+  enumerated (defaults to all variables). In \code{modelsearchBlockDiag} a sequence of models
   is defined from 1 up to \code{maxvars}}
 \item{niter}{Number of Gibbs sampling iterations}
 \item{thinning}{MCMC thinning factor, i.e. only one out of each \code{thinning} iterations are reported. Defaults to thinning=1, i.e. no thinning}
@@ -62,14 +85,20 @@ not performed for these variables}
   Prior dispersion is on coefficients/sqrt(scale) for Normal and
   two-piece Normal, and on coefficients/sqrt(2*scale) for Laplace
   and two-piece Laplace.}
+\item{priorGroup}{Prior on grouped coefficients (e.g. categorical
+  predictors with >2 categories, splines). Created by
+  \code{groupmomprior}, \code{groupemomprior},
+  \code{groupimomprior} or \code{groupzellnerprior}}
 \item{priorDelta}{Prior on model space. Use \code{modelbbprior()}
   for Beta-Binomial prior, \code{modelbinomprior(p)} for Binomial
   prior with prior inclusion probability \code{p},
   \code{modelcomplexprior} for Complexity prior,
   or \code{modelunifprior()} for Uniform prior}
-\item{priorVar}{Inverse gamma prior on scale parameter, created by
-  \code{igprior(). For Normal variance=scale, for Laplace
-    variance=2*scale.}}
+\item{priorConstraints}{Prior distribution on the number of terms
+  subject to hierarchical constrains that are included in the model}
+\item{priorVar}{Inverse gamma prior on scale parameter.
+  For Normal outcomes variance=scale, for Laplace outcomes
+  variance=2*scale}
 \item{priorSkew}{Either a fixed value for tanh(alpha) where alpha is
   the asymmetry parameter or a prior on tanh(alpha).
   For \code{family=='twopiecelaplace'} setting alpha=a is equivalent
@@ -92,7 +121,11 @@ not performed for these variables}
 \item{optimMethod}{Algorithm to maximize objective function when
   method=='Laplace' or method=='MC'. optimMethod=='LMA' uses modified
   Newton-Raphson algorithm, 'CDA' coordinate descent algorithm}
-\item{B}{Number of samples to use in Importance Sampling scheme. Ignored if \code{method=='Laplace'}}
+\item{B}{Number of samples to use in Importance Sampling scheme. Ignored
+  if \code{method=='Laplace'}}
+\item{XtXprecomp}{Set to \code{TRUE} to pre-compute the Gram matrix x'x
+  upfront (saves time), to \code{FALSE} to compute and store elements
+  only as needed (saves memory)}
 \item{verbose}{Set \code{verbose==TRUE} to print iteration progress}
 
 \item{blocksize}{Maximum number of variables in a block. Careful, the
@@ -162,8 +195,7 @@ Object of class \code{msfit}, which extends a list with elements
 \item{postModeProb}{Unnormalized posterior prob of posterior mode (log scale)}
 \item{postProb}{Unnormalized posterior prob of each visited model (log
   scale)}
-\item{coef}{Estimated coefficients (via posterior mode) for highest
-  posterior probability model}
+\item{priors}{List with priors specified when calling \code{modelSelection}}
 }
 \references{
   Johnson V.E., Rossell D. Non-Local Prior Densities for Default
@@ -184,6 +216,9 @@ Object of class \code{msfit}, which extends a list with elements
 \seealso{
   \code{\link{msfit-class}} for details on the output.
   \code{\link{postProb}} to obtain posterior model probabilities.
+  \code{coef.msfit} for Bayesian model averaging estimates and
+  intervals. \code{predict.msfit} for BMA estimates and intervals
+  for user-supplied covariate values.
  \code{\link{rnlp}} to obtain posterior samples for the coefficients.
  \code{\link{nlpMarginal}} to compute marginal densities for a given model.
 
@@ -196,24 +231,23 @@ theta <- matrix(c(1,1,0),ncol=1)
 y <- x \%*\% theta + rnorm(100)
 
 #Specify prior parameters
-priorCoef <- imomprior(tau=1)
+priorCoef <- momprior(tau=0.348)
 priorDelta <- modelunifprior()
-priorVar <- igprior(alpha=.01,lambda=.01)
 
-#Alternative prior for model space: 0.5 prior prob for including any covariate
+#Alternative model space prior: 0.5 prior prob for including any covariate
 priorDelta <- modelbinomprior(p=0.5)
 
-#Alternative prior for model space: Beta hyper-prior for prob of inclusion
+#Alternative: Beta-Binomial prior for model space
 priorDelta <- modelbbprior(alpha.p=1,beta.p=1)
 
 #Model selection
-fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE, niter=10^2,
-priorCoef=priorCoef, priorDelta=priorDelta, priorVar=priorVar, phi=1,
-method='Laplace')
-fit1$postMode
-fit1$margpp
-postProb(fit1)
+fit1 <- modelSelection(y=y, x=x, center=FALSE, scale=FALSE,
+priorCoef=priorCoef, priorDelta=priorDelta)
+postProb(fit1) #posterior model probabilities
 
+fit1$margpp #posterior marginal inclusion prob
+
+coef(fit1) #BMA estimates, 95% intervals, marginal post prob
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
