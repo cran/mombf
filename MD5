@@ -1,5 +1,5 @@
 51f2792d960537d4ec7392384452e639 *ChangeLog
-d518abdb32c6cec714b042dcbe8f7388 *DESCRIPTION
+65db1548ae3049f9c9dc3f3d36f39304 *DESCRIPTION
 7b9fd041522bac846027da1323c83550 *INDEX
 27c0deadddfada91fd7ce28e7ad19728 *NAMESPACE
 47c96be13b5c13650d21fab6b89930a8 *R/AllClasses.R
@@ -30,7 +30,6 @@ cb0b70d429cf820e611b8a92f7317c27 *R/pmomLM.R
 ed339218d7bbf545d8a3d00085b5d00a *R/testfunction.R
 3c6a74a2d6d7cd7d74497ed0007e62b5 *R/zellnerLM.R
 d3d3f65dd887daef36a01b543edbe154 *build/vignette.rds
-c3cded853a2388ad53569a7105d1c1e3 *cleanup
 b6c01994a015b663629787c612b39de9 *data/hald.rda
 716468b02d9fb0d8b594e013dc76aa9c *inst/doc/mombf.R
 729668dd5ab3249d8f24478f46b5e442 *inst/doc/mombf.Rnw
@@ -58,6 +57,7 @@ f479df2f9526d3ae61e92d8605b3511a *man/pmomLM.Rd
 4ff7810e6d454d790d84fe91ada723d1 *man/postProb.Rd
 c4f39d0981250a617c73f534656ccdb3 *man/postSamples.Rd
 1539f0cfab3db487a733f9077fb3c63e *man/rnlp.Rd
+e3d3cb360fbfdb3c6974e14eb5f09870 *src/Makevars
 fdcb2e0c2502ed804ae55e75cf88055c *src/Makevars.win
 bc34cd47a77d2acfc941f8ece0793e7c *src/Polynomial.cpp
 cbcf37dd05473fcdb51321d0783e4d2e *src/Polynomial.h
