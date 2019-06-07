@@ -53,6 +53,8 @@ typedef void (*pt2hess)(double **H, double *th, int *sel, int *thlength, struct 
 //
 // - cda, blockcda: Coordinate Descent Algorithms using updateUniv
 // - cdaNewton, blockcdaNewton: Newton-based CDA using gradhess
+// - Newton: Newton-Raphson (modifying Hessian to be +def whenever needed)
+// - laplaceapprox: Laplace approximation to the integrated likelihood
 
 
 
@@ -95,8 +97,9 @@ public:
   void cdaNewton(double *thopt, double *fopt, double *thini, int maxsteps); //CDA with approx updates given by Newton's method (uses gradhess)
   void cdaNewton(double *thopt, double *fopt, double *thini, std::map<string, double *> *funargs, int maxsteps);
   void blockcdaNewton(double *thopt, double *fopt, double *thini, std::map<string, double *> *funargs, int maxsteps); //Block CDA with Newton method updates (uses gradhess)
+  void Newton(double *thopt, double *fopt, double *thini, std::map<string, double *> *funargs, int maxsteps);  //Newton-Raphson optimization (modifying hessian to be +def when needed)
 
-  double laplaceapprox(double *thopt, double *fopt, double **H); //Laplace approximation to int exp(-fun(th)) dth
+  double laplaceapprox(double *thopt, double *fopt, double **H, double **cholH, bool returnH, std::map<string, double *> *funargs); //Laplace approximation to int exp(-fun(th)) dth
   double laplaceapprox(double *thopt, double *fopt, std::map<string, double *> *funargs);
   double laplaceapprox(double *thopt, std::map<string, double *> *funargs);
 

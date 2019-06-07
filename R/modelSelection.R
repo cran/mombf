@@ -158,7 +158,7 @@ defaultmom= function(outcometype=outcometype,family=family) {
 
 
 #### General model selection routines
-modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x), constraints, center=TRUE, scale=TRUE, enumerate, includevars=rep(FALSE,ncol(x)), maxvars, niter=10^4, thinning=1, burnin=round(niter/10), family='normal', priorCoef, priorGroup, priorDelta=modelbbprior(1,1), priorConstraints=priorDelta, priorVar=igprior(.01,.01), priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA', B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE) {
+modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), constraints, center=TRUE, scale=TRUE, enumerate, includevars=rep(FALSE,ncol(x)), maxvars, niter=5000, thinning=1, burnin=round(niter/10), family='normal', priorCoef, priorGroup, priorDelta=modelbbprior(1,1), priorConstraints=priorDelta, priorVar=igprior(.01,.01), priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA', B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE) {
 # Input
 # - y: either formula with the regression equation or vector with response variable. If a formula arguments x, groups & constraints are ignored
 # - x: design matrix with all potential predictors
@@ -202,7 +202,9 @@ modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x),
       des= createDesign(y, data=data, smoothterms=smoothterms, splineDegree=splineDegree, nknots=nknots)
       x= des$x; groups= des$groups; constraints= des$constraints; typeofvar= des$typeofvar
       if (class(des$y)=="Surv") {
-          cat("The response type is survival. Remember that you should log-transform the times before running modelSelection\n")
+          if (all(des$y[,1] >0)) {
+              cat("Response type is survival and all its values are >0. Remember that you should log-transform the response prior to running modelSelection\n")
+          }
           outcometype= 'Survival'; uncens= as.integer(des$y[,2]); y= des$y[,1]
           ordery= c(which(uncens==1),which(uncens!=1)); y= y[ordery]; x= x[ordery,,drop=FALSE]; uncens= uncens[ordery]
           if (family !="normal") stop("For survival outcomes only family='normal' is currently implemented")
@@ -237,7 +239,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x),
   }
   if (missing(priorGroup)) { if (length(groups)==length(unique(groups))) { priorGroup= priorCoef } else { priorGroup= groupzellnerprior(tau=n) } }
   tmp= codeGroupsAndConstraints(p=p,groups=groups,constraints=constraints)
-  ngroups= tmp$ngroups; constraints= tmp$constraints; nvaringroup=tmp$nvaringroup; groups=tmp$groups
+  ngroups= tmp$ngroups; constraints= tmp$constraints; invconstraints= tmp$invconstraints; nvaringroup=tmp$nvaringroup; groups=tmp$groups
   if (missing(enumerate)) enumerate= ifelse(ngroups<15,TRUE,FALSE)
 
   #Standardize (y,x) to mean 0 and variance 1
@@ -293,7 +295,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x),
     postModeProb <- double(1)
     if (initSearch=='greedy') {
       niterGreed <- as.integer(100)
-      ans= .Call("greedyVarSelCI",knownphi,familygreedy,prior,priorgr,niterGreed,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,xstd,hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,as.integer(verbose))
+      ans= .Call("greedyVarSelCI",knownphi,familygreedy,prior,priorgr,niterGreed,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,xstd,hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
       postMode <- ans[[1]]; postModeProb <- ans[[2]]
       if (familyint==0) { postMode <- as.integer(c(postMode,0,0)); postModeProb <- as.double(postModeProb - 2*log(2)) }
       postMode[includevars==1] <- TRUE
@@ -309,7 +311,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x),
     }
 
     #Run MCMC
-    ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,as.integer(verbose))
+    ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postSample <- matrix(ans[[1]],ncol=ifelse(familyint!=0,p,p+2))
     margpp <- ans[[2]]; postMode <- ans[[3]]; postModeProb <- ans[[4]]; postProb <- ans[[5]]
 
@@ -325,7 +327,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=14, groups=1:ncol(x),
     nmodels= as.integer(nrow(models))
     models= as.integer(models)
     includevars= as.integer(includevars)
-    ans= .Call("modelSelectionEnumCI", nmodels,models,knownphi,familyint,prior,priorgr,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,as.integer(verbose))
+    ans= .Call("modelSelectionEnumCI", nmodels,models,knownphi,familyint,prior,priorgr,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postMode <- ans[[1]]; postModeProb <- ans[[2]]; postProb <- ans[[3]]
     postSample <- matrix(nrow=0,ncol=ifelse(familyint!=0,p,p+2))
     models <- matrix(models,nrow=nmodels)
@@ -485,7 +487,11 @@ codeGroupsAndConstraints= function(p,groups,constraints) {
         groups= as.integer(groupsnum-1) #group id that each variable belongs to
         #groups= as.integer(c(0,as.numeric(cumsum(nvaringroup[-length(nvaringroup)])))) #1st variable in each group (0-indexed)
     }
-    ans= list(ngroups=ngroups,constraints=constraints,nvaringroup=nvaringroup,groups=groups)
+    #Determine inverse constraints
+    invconstraints= vector("list",ngroups)
+    tabconstr= cbind(group=rep(0:(ngroups-1), sapply(constraints,length)), requires= unlist(constraints))
+    for (i in 1:ngroups) { invconstraints[[i]]= as.integer(tabconstr[tabconstr[,'requires']==(i-1), 'group']) }
+    ans= list(ngroups=ngroups,constraints=constraints,invconstraints=invconstraints,nvaringroup=nvaringroup,groups=groups)
     return(ans)
 }
 
@@ -580,14 +586,17 @@ formatmsMethod= function(method, priorCoef, knownphi) {
 #Input: priorCoef, priorVar, priorSkew, priorDelta
 #Output: parameters for prior on coefficients (r, prior, tau), prior on variance parameter (alpha, lambda), skewness parameter (taualpha, fixatanhalpha), model space prior (prDelta, prDeltap, parprDeltap)
 formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta, priorConstraints) {
+  r= as.integer(1)
   if (priorCoef@priorDistr=='pMOM') {
     r <- as.integer(priorCoef@priorPars['r']); prior <- as.integer(0)
   } else if (priorCoef@priorDistr=='piMOM') {
-    r <- as.integer(1); prior <- as.integer(1)
+    prior <- as.integer(1)
   } else if (priorCoef@priorDistr=='peMOM') {
-    r <- as.integer(1); prior <- as.integer(2)
+    prior <- as.integer(2)
   } else if (priorCoef@priorDistr=='zellner') {
-    r <- as.integer(1); prior <- as.integer(3)
+    prior <- as.integer(3)
+  } else if (priorCoef@priorDistr=='groupzellner') {
+    prior <- as.integer(13)
   } else {
     stop('Prior specified in priorDistr not recognized')
   }
