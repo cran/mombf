@@ -164,16 +164,7 @@ head(th)
 
 
 ###################################################
-### code chunk number 15: rnlp
-###################################################
-model <- apply(th!=0,1,function(z) paste(which(z),collapse=','))
-table(model)
-colMeans(th[model=='1,2,4',])
-colMeans(th[model=='1,2,3,4',])
-
-
-###################################################
-### code chunk number 16: rnlponemodel
+### code chunk number 15: rnlponemodel
 ###################################################
 tau= 0.348
 shrinkage= nrow(x)*tau/(1+nrow(x)*tau)
@@ -185,7 +176,7 @@ colMeans(th)
 
 
 ###################################################
-### code chunk number 17: bmsortho
+### code chunk number 16: bmsortho
 ###################################################
 set.seed(1)
 p <- 200; n <- 210
@@ -211,7 +202,7 @@ head(pm.mom$models)
 
 
 ###################################################
-### code chunk number 18: bmsorthopp
+### code chunk number 17: bmsorthopp
 ###################################################
 par(mar=c(5,5,1,1))
 nvars <- sapply(strsplit(as.character(pm.zell$models$modelid),split=','),length)
@@ -227,7 +218,7 @@ legend('topright',c('Zellner','MOM'),pch=c(1,17),col=c('black','gray'),cex=1.5)
 
 
 ###################################################
-### code chunk number 19: bmaortho
+### code chunk number 18: bmaortho
 ###################################################
 par(mar=c(5,5,1,1))
 ols <- (t(x) %*% y) / colSums(x^2)
@@ -238,7 +229,7 @@ legend('topleft',c('Zellner','MOM'),pch=c(1,3),col=c('black','darkgray'))
 
 
 ###################################################
-### code chunk number 20: bmsorthopp
+### code chunk number 19: bmsorthopp
 ###################################################
 par(mar=c(5,5,1,1))
 nvars <- sapply(strsplit(as.character(pm.zell$models$modelid),split=','),length)
@@ -254,7 +245,7 @@ legend('topright',c('Zellner','MOM'),pch=c(1,17),col=c('black','gray'),cex=1.5)
 
 
 ###################################################
-### code chunk number 21: bmaortho
+### code chunk number 20: bmaortho
 ###################################################
 par(mar=c(5,5,1,1))
 ols <- (t(x) %*% y) / colSums(x^2)
@@ -265,7 +256,7 @@ legend('topleft',c('Zellner','MOM'),pch=c(1,3),col=c('black','darkgray'))
 
 
 ###################################################
-### code chunk number 22: bmsblockdiag1
+### code chunk number 21: bmsblockdiag1
 ###################################################
 set.seed(1)
 p <- 100; n <- 110
@@ -288,7 +279,7 @@ y <- x %*% matrix(th,ncol=1) + rnorm(n,sd=sqrt(phi))
 
 
 ###################################################
-### code chunk number 23: bmsblockdiag2
+### code chunk number 22: bmsblockdiag2
 ###################################################
 priorCoef=zellnerprior(tau=n)
 priorDelta=modelbinomprior(p=1/p)
@@ -298,6 +289,22 @@ priorDelta=priorDelta,priorVar=priorVar,bma=TRUE)
 
 head(pm$models)
 head(pm$postmean.model)
+
+
+###################################################
+### code chunk number 23: coolblock
+###################################################
+maxvars=50
+ylim=range(pm$postmean.model[,-1])
+plot(NA,NA,xlab='Model size',
+  ylab='Posterior mean given model',
+  xlim=c(0,maxvars),ylim=ylim,cex.lab=1.5)
+visited <- which(!is.na(pm$models$pp))
+for (i in 2:ncol(pm$postmean.model)) {
+  lines(pm$models$nvars[visited],pm$postmean.model[visited,i])
+}
+text(maxvars, pm$postmean.model[maxvars,which(th!=0)+1],
+paste('X',which(th!=0),sep=''), pos=3)
 
 
 ###################################################
@@ -317,23 +324,7 @@ paste('X',which(th!=0),sep=''), pos=3)
 
 
 ###################################################
-### code chunk number 25: coolblock
-###################################################
-maxvars=50
-ylim=range(pm$postmean.model[,-1])
-plot(NA,NA,xlab='Model size',
-  ylab='Posterior mean given model',
-  xlim=c(0,maxvars),ylim=ylim,cex.lab=1.5)
-visited <- which(!is.na(pm$models$pp))
-for (i in 2:ncol(pm$postmean.model)) {
-  lines(pm$models$nvars[visited],pm$postmean.model[visited,i])
-}
-text(maxvars, pm$postmean.model[maxvars,which(th!=0)+1],
-paste('X',which(th!=0),sep=''), pos=3)
-
-
-###################################################
-### code chunk number 26: six
+### code chunk number 25: six
 ###################################################
 set.seed(4*2*2008)
 n <- 50; theta <- c(log(2),0)
@@ -344,7 +335,7 @@ y <- rbinom(n,1,p)
 
 
 ###################################################
-### code chunk number 27: pmomLM
+### code chunk number 26: pmomLM
 ###################################################
 th <- pmomLM(y=y,x=x,xadj=rep(1,n),niter=10000)
 head(th$postModel)
@@ -352,7 +343,7 @@ table(apply(th$postModel,1,paste,collapse=','))
 
 
 ###################################################
-### code chunk number 28: seven
+### code chunk number 27: seven
 ###################################################
 glm1 <- glm(y~x[,1]+x[,2],family=binomial(link = "probit"))
 thetahat <- coef(glm1)
@@ -365,7 +356,7 @@ bfimom.1
 
 
 ###################################################
-### code chunk number 29: nine
+### code chunk number 28: nine
 ###################################################
 bfmom.2 <- momknown(thetahat[3],V[3,3],n=n,g=g,sigma=1)
 bfimom.2 <- imomknown(thetahat[3],V[3,3],n=n,nuisance.theta=2,g=g,sigma=1)
@@ -374,7 +365,7 @@ bfimom.2
 
 
 ###################################################
-### code chunk number 30: ten
+### code chunk number 29: ten
 ###################################################
 bfmom.0 <- momknown(thetahat[2:3],V[2:3,2:3],n=n,g=g,sigma=1)
 bfimom.0 <- imomknown(thetahat[2:3],V[2:3,2:3],n=n,nuisance.theta=2,g=g,sigma=1)
@@ -383,7 +374,7 @@ bfimom.0
 
 
 ###################################################
-### code chunk number 31: eleven
+### code chunk number 30: eleven
 ###################################################
 prior.prob <- rep(1/4,4)
 bf <- c(bfmom.0,bfmom.1,bfmom.2,1)
@@ -392,7 +383,7 @@ pos.prob
 
 
 ###################################################
-### code chunk number 32: mixtures1
+### code chunk number 31: mixtures1
 ###################################################
 set.seed(1)
 n=200; k=1:3
@@ -400,14 +391,14 @@ x= rnorm(n)
 
 
 ###################################################
-### code chunk number 33: mixtures2
+### code chunk number 32: mixtures2
 ###################################################
 fit= bfnormmix(x=x,k=k,q=3,q.niw=1,B=10^4)
 postProb(fit)
 
 
 ###################################################
-### code chunk number 34: mixturesNIW
+### code chunk number 33: mixturesNIW
 ###################################################
 mcmcout= postSamples(fit)
 names(mcmcout)
@@ -420,7 +411,7 @@ parest[[2]]
 
 
 ###################################################
-### code chunk number 35: mixturesMOMIW
+### code chunk number 34: mixturesMOMIW
 ###################################################
 w= postSamples(fit)[[2]]$momiw.weight
 apply(mcmcout[[2]]$eta, 2, weighted.mean, w=w)
@@ -428,7 +419,7 @@ apply(mcmcout[[2]]$mu, 2, weighted.mean, w=w)
 
 
 ###################################################
-### code chunk number 36: mixture2comp
+### code chunk number 35: mixture2comp
 ###################################################
 set.seed(1)
 n=200; k=1:3; probs= c(1/2,1/2)

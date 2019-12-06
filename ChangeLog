@@ -1,3 +1,21 @@
+CHANGES IN VERSION 2.2.9
+- Fixed NOTE due to specifying non-canonical URL for mombf package
+
+CHANGES IN VERSION 2.2.8
+- Fixed error in Windows checks related to a test in test-modelSelection-Gibbs.R
+
+CHANGES IN VERSION 2.2.7
+- Fixed error caused by class(smoothterms) returning multiple values
+
+CHANGES IN VERSION 2.2.6
+- Fixed error caused by class(y) where y is "matrix" returning multiple values
+- Added coefByModel, and hidden function modelSelectionGLM with preliminary GLM support
+- Added nomalidprior
+- Added support for groups and constraints to nlpMarginal
+
+CHANGES IN VERSION 2.2.5
+- Fixed bug that prevented modelSelection to run for survival outcomes where no formula is specified
+
 CHANGES IN VERSION 2.2.4
 - Fixed bug in C++ code for checkConstraints
 - Implemented Newton-Raphson optim in modselFunction.cpp
@@ -37,7 +55,7 @@ CHANGES IN VERSION 2.1.2
 - Added option includeModels to postModeOrtho.
 - Fixed bug in postModeOrtho under Zellner's prior that caused it to return wrong posterior model probabilities
 - rnlp now accepts y formatted as a 1-column matrix
-- pMOM integrated likelihood now defaults to orthogonal approximation, under method=='auto' 
+- pMOM integrated likelihood now defaults to orthogonal approximation, under method=='auto'
 
 CHANGES IN VERSION 2.1.1
 - Fixed R_registerRoutines and R_useDynamicSymbols NOTE when running R CMD check

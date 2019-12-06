@@ -18,30 +18,37 @@ hasPostSampling <- function(object) {
 #Sends an error message if posterior sampling is not implemented for the priors and outcome type of the msFit object
 #
   #List combinations for which posterior sampling is implemented
-  hassamples= data.frame(matrix(NA,nrow=4,ncol=4))
+  hassamples= data.frame(matrix(NA,nrow=10,ncol=4))
   names(hassamples)= c('outcometype','family','priorCoef','priorGroup')
-  hassamples[1,]=    c('Continuous','normal',   'pMOM',   'pMOM')
-  hassamples[2,]=    c('Continuous','normal',  'peMOM',  'peMOM')
-  hassamples[3,]=    c('Continuous','normal',  'piMOM',  'piMOM')
-  hassamples[4,]=    c('Continuous','normal','zellner','zellner')
+  hassamples[1,] =    c('Continuous','normal',   'pMOM',   'pMOM')
+  hassamples[2,] =    c('Continuous','normal',  'peMOM',  'peMOM')
+  hassamples[3,] =    c('Continuous','normal',  'piMOM',  'piMOM')
+  hassamples[4,] =    c('Continuous','normal','zellner','zellner')
+  hassamples[5,] =    c('glm','binomial logit','bic','bic')
+  hassamples[6,] =    c('glm','binomial probit','bic','bic')
+  hassamples[7,] =    c('glm','gamma inverse','bic','bic')
+  hassamples[8,] =    c('glm','inverse.gaussian 1/mu^2','bic','bic')
+  hassamples[9,] =    c('glm','poisson log','bic','bic')
+  hassamples[10,]=    c('Survival','Cox','bic','bic')
+  #hassamples[11,]=    c('Survival','normal','bic','bic') #to be added
   #Check if there's variable groups
   hasgroups= (length(object$groups) > length(unique(object$groups)))
-  found= FALSE
   outcometype= object$outcometype; family= object$family; priorCoef= object$prior$priorCoef@priorDistr; priorGroup= object$prior$priorGroup@priorDistr
+  outcomefam= paste(outcometype,family,sep=',')
   if (hasgroups) {
-    for (i in 1:nrow(hassamples)) {
-      if (outcometype==hassamples[i,1] && family==hassamples[i,2] && priorCoef==hassamples[i,3] && priorGroup==hassamples[i,4]) found= TRUE
-    }
+    outcomefamprior= paste(outcomefam,priorCoef,priorGroup,sep=',')
   } else {
-    for (i in 1:nrow(hassamples)) {
-      if (outcometype==hassamples[i,1] && family==hassamples[i,2] && priorCoef==hassamples[i,3]) found= TRUE
-    }
+    outcomefamprior= paste(outcomefam,priorCoef)
   }
+  found= outcomefam %in% apply(hassamples[,1:2],1,paste,collapse=',')
+  exactsampling= outcomefamprior  %in% apply(hassamples,1,paste,collapse=',')
   if (!found) {
     cat("Inference on parameters currently only available for the following settings: \n\n")
     print(hassamples)
     cat("\n")
     stop("Inference on parameters not implemented for outcometype= ",outcometype,", family=",family,", priorCoef=",priorCoef,", priorGroup=",priorGroup)
+  } else {
+    if (!exactsampling) warning("Exact posterior sampling not implemented, using Normal approx instead")
   }
 }
 
@@ -52,12 +59,24 @@ coef.msfit <- function(object,...) {
     hasPostSampling(object)
     th= rnlp(msfit=object,niter=10^4)
     ct= (object$stdconstants[-1,'scale']==0)
+    if (!is.null(names(object$margpp))) {
+        nn= names(object$margpp)
+    } else if (!is.null(colnames(th))) {
+        nn= colnames(th)
+    } else { nn= paste('beta',1:ncol(th))  }
     if (any(ct)) {
-        margpp= c(object$margpp,1)
-        nn= c(names(object$margpp),'phi')
+        if (ncol(th) > length(object$margpp)) {
+            margpp= c(object$margpp,1)
+            nn= c(nn,'phi')
+        } else { margpp= object$margpp }
     } else {
-        margpp= c(mean(th[,1]!=0),object$margpp,1)
-        nn= c('intercept',names(object$margpp),'phi')
+        if (ncol(th) > length(object$margpp)) {
+            margpp= c(mean(th[,1]!=0),object$margpp,1)
+            nn= c('intercept',nn,'phi')
+        } else {
+            margpp= c(mean(th[,1]!=0),object$margpp)
+            nn= c('intercept',nn)
+        }
     }
     ans= cbind(colMeans(th),t(apply(th,2,quantile,probs=c(.025,0.975))),margpp=margpp)
     colnames(ans)= c('estimate','2.5%','97.5%','margpp')
@@ -66,13 +85,92 @@ coef.msfit <- function(object,...) {
 }
 
 
+#Return point estimate, 95% interval and posterior model prob for nmax top models
+setMethod("coefByModel", signature(object='msfit'), function(object, maxmodels, alpha=0.05, niter=10^3, burnin=round(niter/10)) {
+
+  if (!is.null(object$postmean) & (object$prior$priorCoef@priorDistr %in% c('bic','zellner'))) {
+
+      postmean= object$postmean[1:min(maxmodels,nrow(object$postmean)),]
+      postsd= sqrt(object$postvar[1:min(maxmodels,nrow(object$postvar)),])
+      ans= list(postmean= postmean, ci.low= postmean + qnorm(alpha/2) * postsd, ci.up= postmean - qnorm(alpha/2) * postsd)
+
+  } else {
+
+    hasPostSampling(object)
+    y= object$ystd; x= object$xstd
+    outcometype= object$outcometype; family= object$family
+    b= min(50, ceiling((burnin/niter) * niter))
+    #List models for which estimates are to be obtained
+    pp= postProb(object,method=pp)
+    modelid= strsplit(as.character(pp$modelid), split=',')
+    modelid= modelid[1:min(maxmodels,length(modelid))]
+    priorCoef= object$priors$priorCoef
+    priorGroup= object$priors$priorGroup
+    priorVar= object$priors$priorVar
+    #Obtain point estimates and posterior intervals
+    ans= vector("list",3); names(ans)= c('postmean','ci.low','ci.up')
+    if ((outcometype== 'Continuous') && (family== 'normal')) { ##Linear model
+      ans[[1]]= ans[[2]]= ans[[3]]= matrix(0,nrow=length(modelid),ncol=ncol(x)+1)
+      for (i in 1:length(modelid)) {  #for each model
+        colsel= as.numeric(modelid[[i]])
+        bm= coefOneModel(y=y, x=x[,colsel,drop=FALSE], outcometype=outcometype, family=family, priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, alpha=alpha, niter=niter, burnin=b)
+        ans[[1]][i,colsel]= bm[,1]
+        ans[[2]][i,colsel]= bm[,2]
+        ans[[3]][i,colsel]= bm[,3]
+      }
+      if (is.null(colnames(x))) nn= c(paste('beta',1:ncol(x),sep=''),'phi') else nn= c(colnames(x),'phi')
+    } else {                                                   ##GLM or Survival model
+      ans[[1]]= ans[[2]]= ans[[3]]= matrix(0, nrow=length(modelid), ncol=ncol(x))
+      for (i in 1:length(modelid)) {   #for each model
+        colsel= as.numeric(modelid[[i]])
+        if (length(colsel)>0) {
+          bm= coefOneModel(y=y, x=x[,colsel,drop=FALSE], outcometype=outcometype, family=family, priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, alpha=alpha, niter=niter, burnin=b)
+          ans[[1]][i,colsel]= bm[,1]
+          ans[[2]][i,colsel]= bm[,2]
+          ans[[3]][i,colsel]= bm[,3]
+        }
+      }
+      if (is.null(colnames(x))) nn= paste('beta',1:ncol(x),sep='') else nn= colnames(x)
+    }
+    colnames(ans[[1]])= colnames(ans[[2]])= colnames(ans[[3]]) = nn
+    rownames(ans[[1]])= rownames(ans[[2]])= rownames(ans[[3]]) = pp$modelid[1:nrow(ans[[1]])]
+
+  }
+
+  #Return parameter estimates in non-standardized parameterization
+  ans[[1]]= unstdcoef(ans[[1]],p=ncol(ans[[1]]),msfit=object,coefnames=nn)
+  ans[[2]]= unstdcoef(ans[[2]],p=ncol(ans[[2]]),msfit=object,coefnames=nn)
+  ans[[3]]= unstdcoef(ans[[3]],p=ncol(ans[[3]]),msfit=object,coefnames=nn)
+  return(ans)
+}
+)
+
+
+
+setMethod("coefOneModel", signature(y='ANY',x='matrix',m='missing',V='missing',outcometype='character',family='character'), function(y, x, m, V, outcometype, family, priorCoef, priorGroup, priorVar, alpha=0.05, niter=10^3, burnin=round(niter/10)) {
+  if ((outcometype== 'Continuous') && (family== 'normal')) {  ##Linear model
+    b= rnlpLM(y=y, x=x, priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, niter=niter, burnin=burnin)
+  } else if (outcometype=='glm') { #GLM
+    b= rnlpGLM(y=y, x=x, family=family, priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, niter=niter, burnin=burnin)
+  } else if ((outcometype=='Survival') && (family=='Cox')) {  #Cox model
+    b= rnlpCox(y=y, x=x, priorCoef=priorCoef, priorGroup=priorGroup, niter=niter, burnin=burnin)
+  } else {
+    stop(paste("outcometype",outcometype,"and family=",family,"not implemented",sep=""))
+  }
+  ans= cbind(colMeans(b), t(apply(b,2,quantile,probs=c(alpha/2,1-alpha/2))))
+  return(ans)
+}
+)
+
+
+
 predict.msfit <- function(object, newdata, data, level=0.95, ...) {
     hasPostSampling(object)
     th= rnlp(msfit=object,niter=10^4)
     mx= object$stdconstants[-1,'shift']; sx= object$stdconstants[-1,'scale']
     if (!missing(newdata)) {
         f= object$call$formula
-        if (class(f)=='formula') {
+        if ('formula' %in% class(f)) {
             alldata= rbind(data,newdata)
             alldata[,as.character(f)[2]]= 0  #ensure there's no NAs in the response, so createDesign doesn't drop those rows from newdata
             nn= rownames(alldata)[(nrow(data)+1):(nrow(data)+nrow(newdata))]
@@ -197,37 +295,22 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
 # - postProb: unnormalized posterior prob of each visited model (log scale)
 
   #Check input
-  if (class(y)=="formula") {
-      formula= y; splineDegree= 3
-      des= createDesign(y, data=data, smoothterms=smoothterms, splineDegree=splineDegree, nknots=nknots)
-      x= des$x; groups= des$groups; constraints= des$constraints; typeofvar= des$typeofvar
-      if (class(des$y)=="Surv") {
-          if (all(des$y[,1] >0)) {
-              cat("Response type is survival and all its values are >0. Remember that you should log-transform the response prior to running modelSelection\n")
-          }
-          outcometype= 'Survival'; uncens= as.integer(des$y[,2]); y= des$y[,1]
-          ordery= c(which(uncens==1),which(uncens!=1)); y= y[ordery]; x= x[ordery,,drop=FALSE]; uncens= uncens[ordery]
-          if (family !="normal") stop("For survival outcomes only family='normal' is currently implemented")
-      } else {
-          outcometype= 'Continuous'; y= des$y; uncens= integer(0)
-      }
-      nlevels= apply(x,2,function(z) length(unique(z)))
-      typeofvar[nlevels==2]= 'factor'
-  } else {
-      if (class(y)=="Surv") {
-          outcometype= 'Survival'; uncens= as.integer(y[,2]); y= des$y[,1]
-          ordery= c(which(uncens==1),which(uncens!=1)); y= y[ordery]; x= x[ordery,,drop=FALSE]; uncens= uncens[ordery]
-          if (family !="normal") stop("For survival outcomes only family='normal' is currently implemented")
-      } else {
-          outcometype= 'Continuous'; uncens= integer(0)
-      }
-      formula= splineDegree= NA; typeofvar= rep('numeric',ncol(x))
-  }
-  call= list(formula=formula, smoothterms= NULL, splineDegree=splineDegree, nknots=nknots)
-  if (!missing(smoothterms)) call$smoothterms= smoothterms
+  tmp <- formatInputdata(y=y,x=x,data=data,smoothterms=smoothterms,nknots=nknots,family=family)
+  x <- tmp$x; y <- tmp$y; formula <- tmp$formula;
+  splineDegree <- tmp$splineDegree
+  if (!is.null(tmp$groups)) groups <- tmp$groups
+  if (!is.null(tmp$constraints)) constraints <- tmp$constraints
+  outcometype <- tmp$outcometype; uncens <- tmp$uncens; ordery <- tmp$ordery
+  typeofvar <- tmp$typeofvar
+  call <- list(formula=formula, smoothterms= NULL, splineDegree=splineDegree, nknots=nknots)
+  if (!missing(smoothterms)) call$smoothterms <- smoothterms
   p= ncol(x); n= length(y)
-  if (nrow(x)!=length(y)) stop('nrow(x) must be equal to length(y)')
-  if (any(is.na(y))) stop('y contains NAs, this is currently not supported, please remove the NAs')
+      if (is.numeric(includevars)) {
+      tmp= rep(FALSE,p)
+      if (max(includevars) > p) stop(paste("includevars contains index ",max(includevars)," but the design matrix only has ",p," columns",sep=""))
+      tmp[includevars]= TRUE
+      includevars= tmp
+  }
   if (length(includevars)!=ncol(x) | (!is.logical(includevars))) stop("includevars must be a logical vector of length ncol(x)")
   if (missing(maxvars)) maxvars= ifelse(family=='auto', p+2, p)
   if (maxvars <= sum(includevars)) stop("maxvars must be >= sum(includevars)")
@@ -252,6 +335,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
   if (!center) { my=0; mx= rep(0,p) } else { my= mean(y) }
   if (!scale) { sy=1; sx= rep(1,p) } else { sy= sd(y) }
   mx[typeofvar=='factor']=0; sx[typeofvar=='factor']= 1
+  if (!(outcometype %in% c('Continuous','Survival'))) { my=0; sy= 1 }
   ystd= (y-my)/sy; xstd= x; xstd[,!ct]= t((t(x[,!ct]) - mx[!ct])/sx[!ct])
   if (missing(phi)) { knownphi <- as.integer(0); phi <- double(0) } else { knownphi <- as.integer(1); phi <- as.double(phi) }
   stdconstants= rbind(c(my,sy),cbind(mx,sx)); colnames(stdconstants)= c('shift','scale')
@@ -278,8 +362,9 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
       hasXtX= as.logical(FALSE)
   }
 
-  tmp= formatmsPriors(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew, priorDelta=priorDelta, priorConstraints=priorConstraints)
+  tmp= formatmsPriorsMarg(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew)
   r= tmp$r; prior= tmp$prior; priorgr= tmp$priorgr; tau=tmp$tau; taugroup=tmp$taugroup; alpha=tmp$alpha; lambda=tmp$lambda; taualpha=tmp$taualpha; fixatanhalpha=tmp$fixatanhalpha
+  tmp= formatmsPriorsModel(priorDelta=priorDelta, priorConstraints=priorConstraints)
   prDelta=tmp$prDelta; prDeltap=tmp$prDeltap; parprDeltap=tmp$parprDeltap
   prConstr=tmp$prConstr; prConstrp= tmp$prConstrp; parprConstrp= tmp$parprConstrp
 
@@ -314,6 +399,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
     ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postSample <- matrix(ans[[1]],ncol=ifelse(familyint!=0,p,p+2))
     margpp <- ans[[2]]; postMode <- ans[[3]]; postModeProb <- ans[[4]]; postProb <- ans[[5]]
+    postmean= postvar= NULL
 
   } else {
 
@@ -339,8 +425,10 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
         margpp= c(margpp[1:ncol(xstd)],sum(pp[modelfam==0]),sum(pp[modelfam==1]),sum(pp[modelfam==2]),sum(pp[modelfam==3]))
         modeltxt= ifelse(modelfam==0,'normal',ifelse(modelfam==1,'twopiecenormal',ifelse(modelfam==2,'laplace','twopiecelaplace')))
         models= data.frame(modelid=modelid,family=modeltxt,pp=pp)
+        postmean= postvar= NULL
     } else {
         models= data.frame(modelid=modelid,family=family,pp=pp)
+        postmean= postvar= NULL
     }
     models= models[order(models$pp,decreasing=TRUE),]
   }
@@ -356,12 +444,61 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
   priors= list(priorCoef=priorCoef, priorGroup=priorGroup, priorDelta=priorDelta, priorConstraints=priorConstraints, priorVar=priorVar, priorSkew=priorSkew)
   if (length(uncens)>0) { ystd[ordery]= ystd; uncens[ordery]= uncens; ystd= Surv(time=ystd, event= uncens); xstd[ordery,]= xstd }
   names(constraints)= paste('group',0:(length(constraints)-1))
-  ans <- list(postSample=postSample,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb,family=family,p=ncol(xstd),enumerate=enumerate,priors=priors,ystd=ystd,xstd=xstd,groups=groups,constraints=constraints,stdconstants=stdconstants,outcometype=outcometype,call=call)
+  ans <- list(postSample=postSample,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb,postmean=postmean,postvar=postvar,family=family,p=ncol(xstd),enumerate=enumerate,priors=priors,ystd=ystd,xstd=xstd,groups=groups,constraints=constraints,stdconstants=stdconstants,outcometype=outcometype,call=call)
   if (enumerate) { ans$models= models }
   new("msfit",ans)
 }
 
-
+# format input data from either formula (y), formula and data.frame (y,data) or matrix and vector (y, x)
+# it accepts smoothterms, groups and survival data
+formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
+  call <- match.call()
+  groups <- NULL; constraints <- NULL; ordery <- NULL
+  if ('formula' %in% class(y)) {
+      formula= y; is_formula=TRUE; splineDegree= 3
+      des= createDesign(y, data=data, smoothterms=smoothterms, splineDegree=splineDegree, nknots=nknots)
+      x= des$x; groups= des$groups; constraints= des$constraints; typeofvar= des$typeofvar
+      if ('Surv' %in% class(des$y)) {
+          if (all(des$y[,1] >0)) {
+              cat("Response type is survival and all its values are >0. Remember that you should log-transform the response prior to running modelSelection\n")
+          }
+          outcometype= 'Survival'; uncens= as.integer(des$y[,2]); y= des$y[,1]
+          ordery= c(which(uncens==1),which(uncens!=1)); y= y[ordery]; x= x[ordery,,drop=FALSE]; uncens= uncens[ordery]
+          if (family !="normal") stop("For survival outcomes only family='normal' is currently implemented")
+      } else {
+          if (family %in% c('normal','twopiecenormal','laplace','twopiecelaplace','auto')) {
+            outcometype= 'Continuous'
+          } else {
+            outcometype= 'glm'
+          }
+          y= des$y; uncens= integer(0)
+      }
+      nlevels <- apply(x,2,function(z) length(unique(z)))
+      typeofvar[nlevels==2]= 'factor'
+  } else {
+      if ('Surv' %in% class(y)) {
+          outcometype= 'Survival'; uncens= as.integer(y[,2]); y= y[,1]
+          ordery= c(which(uncens==1),which(uncens!=1)); y= y[ordery]; x= x[ordery,,drop=FALSE]; uncens= uncens[ordery]
+          if (family !="normal") stop("For survival outcomes only family='normal' is currently implemented")
+      } else {
+        if (family %in% c('normal','twopiecenormal','laplace','twopiecelaplace','auto')) {
+          outcometype= 'Continuous'
+        } else {
+          outcometype= 'glm'
+        }
+        uncens= integer(0)
+      }
+      formula= splineDegree= NA; is_formula=FALSE; typeofvar= rep('numeric',ncol(x))
+  }
+  if (nrow(x)!=length(y)) stop('nrow(x) must be equal to length(y)')
+  if (any(is.na(y))) stop('y contains NAs, this is currently not supported, please remove the NAs')
+  ans <- list(
+    x=x, y=y, formula=formula, is_formula=is_formula, splineDegree=splineDegree,
+    groups=groups, constraints=constraints, outcometype=outcometype, uncens=uncens,
+    ordery=ordery, typeofvar=typeofvar
+  )
+  return(ans)
+}
 
 #Create a design matrix for the given formula. Return also covariate groups (e.g. from factors), covariate type (factor/numeric) and hierarchical constraints (e.g. from interaction terms), these are the parameters "groups" and "constraints" in modelSelection
 createDesign <- function(formula, data, smoothterms, subset, na.action, splineDegree=3, nknots=14) {
@@ -389,7 +526,8 @@ createDesign <- function(formula, data, smoothterms, subset, na.action, splineDe
     mf = na.action(mf)
     mt = attributes(mf)[["terms"]]  #mt is an object of class "terms" storing info about the model, see help(terms.object) for a description
     y <- model.response(mf, "any")
-    x <- if (!is.empty.model(mt)) model.matrix(mt, mf, contrasts) else matrix(, NROW(y), 0)
+    x <- if (!is.empty.model(mt)) model.matrix(mt, mf) else matrix(, NROW(y), 0)
+    #x <- if (!is.empty.model(mt)) model.matrix(mt, mf, contrasts) else matrix(, NROW(y), 0)
     groups <- attr(x,"assign") #group that each variable belongs to, e.g. for factors
     tab= table(groups);
     typeofvar= ifelse(groups %in% as.numeric(names(tab)[tab>1]),'factor','numeric')
@@ -413,9 +551,9 @@ createDesign <- function(formula, data, smoothterms, subset, na.action, splineDe
     groups= groups+intercept
     #Add spline terms
     if (!missing(smoothterms)) {
-        if (!(class(smoothterms) %in% c('formula','matrix','data.frame'))) stop("smoothterms should be of class 'formula', 'matrix' or 'data.frame'")
+        if (!any(c('formula','matrix','data.frame') %in% class(smoothterms))) stop("smoothterms should be of class 'formula', 'matrix' or 'data.frame'")
         maxgroups= max(groups)
-        if (class(smoothterms)=='formula') {
+        if ('formula' %in% class(smoothterms)) {
             smoothterms= formula(paste("~ ",-1,"+",as.character(smoothterms)[2])) #remove intercept
             L= createDesign(smoothterms, data=data, subset=subset, na.action=na.action)$x
         } else {
@@ -582,10 +720,10 @@ formatmsMethod= function(method, priorCoef, knownphi) {
   return(method)
 }
 
-#Routine to format modelSelection prior distribution parameters
-#Input: priorCoef, priorVar, priorSkew, priorDelta
-#Output: parameters for prior on coefficients (r, prior, tau), prior on variance parameter (alpha, lambda), skewness parameter (taualpha, fixatanhalpha), model space prior (prDelta, prDeltap, parprDeltap)
-formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta, priorConstraints) {
+#Routine to format modelSelection prior distribution parameters for marginal likelihood
+#Input: priorCoef, priorVar, priorGroup, priorSkew
+#Output: parameters for prior on coefficients (r, prior, tau), prior on variance parameter (alpha, lambda), skewness parameter (taualpha, fixatanhalpha)
+formatmsPriorsMarg <- function(priorCoef, priorGroup, priorVar, priorSkew) {
   r= as.integer(1)
   if (priorCoef@priorDistr=='pMOM') {
     r <- as.integer(priorCoef@priorPars['r']); prior <- as.integer(0)
@@ -595,6 +733,8 @@ formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta,
     prior <- as.integer(2)
   } else if (priorCoef@priorDistr=='zellner') {
     prior <- as.integer(3)
+  } else if (priorCoef@priorDistr=='normalid') {
+    prior <- as.integer(4)
   } else if (priorCoef@priorDistr=='groupzellner') {
     prior <- as.integer(13)
   } else {
@@ -608,6 +748,8 @@ formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta,
     priorgr= as.integer(2)
   } else if (priorGroup@priorDistr=='zellner') {
       priorgr= as.integer(3)
+  } else if (priorGroup@priorDistr=='normalid') {
+      priorgr= as.integer(4)
   } else if (priorGroup@priorDistr=='groupMOM') {
     priorgr= as.integer(10)
   } else if (priorGroup@priorDistr=='groupiMOM') {
@@ -623,13 +765,21 @@ formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta,
   taugroup <- as.double(priorGroup@priorPars['tau'])
   alpha <- as.double(priorVar@priorPars['alpha']); lambda <- as.double(priorVar@priorPars['lambda'])
   #
-  if (class(priorSkew)=='msPriorSpec') {
+  if ('msPriorSpec' %in% class(priorSkew)) {
       taualpha <- as.double(priorSkew@priorPars['tau'])
       fixatanhalpha <- as.double(-10000)
   } else {
       taualpha <- 0.358
       fixatanhalpha <- as.double(priorSkew)
   }
+    ans= list(r=r,prior=prior,priorgr=priorgr,tau=tau,taugroup=taugroup,alpha=alpha,lambda=lambda,taualpha=taualpha,fixatanhalpha=fixatanhalpha)
+  return(ans)
+}
+
+#Routine to format modelSelection prior distribution parameters in model space
+#Input: priorDelta, priorConstraints
+#Output: model space prior (prDelta, prDeltap, parprDeltap) and constraints (prConstr,prConstrp,parprConstrp)
+formatmsPriorsModel <- function(priorDelta, priorConstraints) {
   #Prior on model space (parameters not subject to hierarchical constraints)
   if (priorDelta@priorDistr=='uniform') {
     prDelta <- as.integer(0)
@@ -679,11 +829,9 @@ formatmsPriors= function(priorCoef, priorGroup, priorVar, priorSkew, priorDelta,
     stop('Prior specified in priorConstraints not recognized')
   }
 
-  ans= list(r=r,prior=prior,priorgr=priorgr,tau=tau,taugroup=taugroup,alpha=alpha,lambda=lambda,taualpha=taualpha,fixatanhalpha=fixatanhalpha,prDelta=prDelta,prDeltap=prDeltap,parprDeltap=parprDeltap,prConstr=prConstr,prConstrp=prConstrp,parprConstrp=parprConstrp)
+  ans= list(prDelta=prDelta,prDeltap=prDeltap,parprDeltap=parprDeltap,prConstr=prConstr,prConstrp=prConstrp,parprConstrp=parprConstrp)
   return(ans)
 }
-
-
 
 greedymodelSelectionR <- function(y, x, niter=100, marginalFunction, priorFunction, betaBinPrior, deltaini=rep(FALSE,ncol(x)), verbose=TRUE, ...) {
   #Greedy version of modelSelectionR where variables with prob>0.5 at current iteration are included deterministically (prob<.5 excluded)
@@ -716,110 +864,6 @@ greedymodelSelectionR <- function(y, x, niter=100, marginalFunction, priorFuncti
   }
   return(sel)
 }
-
-modelSelectionR <- function(y, x, niter=10^4, marginalFunction, priorFunction, betaBinPrior, deltaini=rep(FALSE,ncol(x)), verbose=TRUE, ...) {
-# Input
-# - y: vector with response variable
-# - x: design matrix with all potential predictors
-# - niter: number of Gibbs sampling iterations
-# - marginalFunction: function to compute the marginal density of the data under each model
-# - priorFunction: function to compute the model prior probability
-# - betaBinPrior: if specified, priorFunction argument is ignored and set to a binomial prior with Beta-hyperprior for the success prob. betaBinPrior should be a vector with named elements 'alpha.p' and 'beta.p', e.g. betaBinPrior= c(alpha.p=1,beta.p=1)
-# - deltaini: logical vector of length ncol(x) indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model
-# ...: other arguments to be passed on to marginalFunction
-# Output: list
-# - postSample: posterior samples for model indicator
-# - postOther: posterior samples for other parameters (probBin: success probability for Binomial prior on number of coefficients in the model)
-# - margpp: marginal posterior probability for inclusion of each covariate (approx by averaging marginal post prob for inclusion in each Gibbs iteration. This approx is more accurate than simply taking colMeans(postSample))
-# - postMode: model with highest posterior probability amongst all those visited
-# - postModeProb: unnormalized posterior prob of posterior mode (log scale)
-# - postProb: unnormalized posterior prob of each visited model (log scale)
-if (class(y)=='Surv') {
-  if ((length(y)/2) != nrow(x)) stop("Dimensions of y and x do not match")
-} else {
-  if (length(y) != nrow(x)) stop("Dimensions of y and x do not match")
-}
-if (any(is.na(x))) stop("x cannot have missing values")
-p <- ncol(x)
-if (length(deltaini)!=p) stop('deltaini must be of length ncol(x)')
-if (!missing(betaBinPrior)) {
-  #Initialize probBin
-  if ((betaBinPrior['alpha.p']>1) && (betaBinPrior['beta.p']>1)) {
-    probBin <- (betaBinPrior['alpha.p']-1)/(betaBinPrior['alpha.p']+betaBinPrior['beta.p']-2)
-  } else {
-    probBin <- (betaBinPrior['alpha.p'])/(betaBinPrior['alpha.p']+betaBinPrior['beta.p'])
-  }
-  postOther <- matrix(NA,nrow=niter,ncol=1); colnames(postOther) <- c('probBin')
-  priorFunction <- function(sel, logscale=TRUE) dbinom(x=sum(sel),size=length(sel),prob=probBin,log=logscale)
-} else {
-  postOther <- matrix(NA,nrow=niter,ncol=0)
-}
-if (ncol(x)>12) {
-  sel <- postMode <- deltaini
-  currentJ <- postModeProb <- marginalFunction(y=y,x=x[,sel,drop=FALSE],logscale=TRUE,...) + priorFunction(sel,logscale=TRUE)
-  postSample <- matrix(NA,nrow=niter,ncol=p)
-  margpp <- double(p)
-  postProb <- double(niter)
-  k <- 1; postProb[k] <- postModeProb
-  names(postProb)[k] <- paste("V",which(sel),collapse=',',sep='')
-  niter10 <- ceiling(niter/10)
-  for (i in 1:niter) {
-    for (j in 1:p) {
-      selnew <- sel; selnew[j] <- !sel[j]
-      namenew <- paste(which(selnew),collapse=',')
-      newJ <- postProb[namenew]
-      if (is.na(newJ)) {
-        newJ <- marginalFunction(y=y,x=x[,selnew,drop=FALSE],logscale=TRUE,...) + priorFunction(selnew,logscale=TRUE)
-        k <- k+1; postProb[k] <- newJ
-        names(postProb)[k] <- paste("V",which(selnew),collapse=',',sep='')
-      }
-      if (newJ>postModeProb) {
-        postModeProb <- newJ
-        postMode <- selnew
-      }
-      pp <- 1/(1+exp(-currentJ+newJ))
-      if (sel[j]) {  #if variable in the model
-        sel[j] <- runif(1)<pp
-        margpp[j] <- margpp[j]+pp
-      } else {       #if variable not in the model
-        sel[j] <- runif(1)>pp
-        margpp[j] <- margpp[j]+1-pp
-      }
-      if (sel[j]==selnew[j]) {  #if value was updated, update marginal and prior densities
-        currentJ <- newJ
-      }
-    }
-    if (!missing(betaBinPrior)) {
-      probBin <- rbeta(1,betaBinPrior['alpha.p']+sum(sel), betaBinPrior['beta.p']+sum(!sel))
-      postOther[i,'probBin'] <- probBin
-    }
-    postSample[i,] <- sel
-    postProb[i] <- currentJ
-    if (verbose && ((i%%niter10)==0)) cat('.')
-  }
-  margpp <- margpp/niter
-  if (verbose) cat('\n')
-  #Format postProb
-  modelid <- sapply(apply(postSample,1,which),function(z) paste("V",z,collapse=',',sep=''))
-  postProb <- postProb[modelid]
-} else {
-  if (verbose) cat(paste("Computing posterior probabilities for all",2^ncol(x),"models..."))
-  models <- expand.grid(lapply(1:ncol(x),function(z) c(FALSE,TRUE)))
-  postProb <- apply(models,1, function(z) marginalFunction(y=y,x=x[,z,drop=FALSE],logscale=TRUE,...) + priorFunction(z,logscale=TRUE))
-  if (verbose) cat('\n')
-  postMode <- models[which.max(postProb),]
-  postModeProb <- max(postProb)
-  pp <- postProb - postModeProb; pp <- exp(pp)/sum(exp(pp))
-  sampledmodels <- rep(1:nrow(models), rmultinom(1,size=niter,prob=pp)[,1])
-  postSample <- models[sampledmodels,]
-  postProb <- postProb[sampledmodels]
-  margpp <- as.vector(t(models) %*% matrix(pp,ncol=1))
-}
-ans <- list(postSample=postSample,postOther=postOther,margpp=margpp,postMode=postMode,postModeProb=postModeProb,postProb=postProb)
-ans <- new("msfit",ans)
-return(ans)
-}
-
 
 #Gibbs model selection using BIC to approximate marginal likelihood
 # - y, x, xadj: response, covariates under selection and adjustment covariates
@@ -910,8 +954,8 @@ nselConstraints= function(sel, groups, constraints) {
 binomPrior <- function(sel, prob=.5, logscale=TRUE, probconstr=prob, groups=1:length(sel), constraints=lapply(1:length(unique(groups)), function(z) integer(0))) {
     nsel= nselConstraints(sel=sel, groups=groups, constraints=constraints)
     if (!nsel$violateConstraint) {
-        ans= dbinom(x=nsel$ngroups0,size=nsel$ngroups-nsel$ngroupsconstr,prob=prob,log=TRUE)
-        if (nsel$ngroupsconstr>0) ans= ans+ dbinom(x=nsel$ngroups1,size=nsel$ngroupsconstr,prob=probconstr,log=TRUE)
+        ans= dbinom(x=nsel$ngroups0,size=nsel$ngroups-nsel$ngroupsconstr,prob=prob,log=TRUE) - lchoose(nsel$ngroups-nsel$ngroupsconstr, nsel$ngroups0)
+        if (nsel$ngroupsconstr>0) ans= ans+ dbinom(x=nsel$ngroups1,size=nsel$ngroupsconstr,prob=probconstr,log=TRUE) - lchoose(nsel$ngroupsconstr, nsel$ngroups1)
     } else { ans= -Inf }
     if (!logscale) ans= exp(ans)
     return(ans)
