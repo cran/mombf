@@ -47,7 +47,9 @@ valid_msPriorSpec <- function(object) {
     ## Validate rest based on type
     switch(object@priorType,
            coefficients = {
-               valid_coef_prior_distrs <- c("pMOM","piMOM","peMOM","zellner","groupzellner","normalid","bic")
+               valid_coef_prior_distrs <- c(
+                 "pMOM","groupMOM","piMOM","peMOM","zellner","groupzellner","normalid","bic"
+               )
                found <- object@priorDistr %in% valid_coef_prior_distrs
                if (!found) {
                    msg <- c(msg,
@@ -67,17 +69,16 @@ valid_msPriorSpec <- function(object) {
                                         sQuote("pMOM")))
                    }
                }
-               reqd_prior_pars <- c("tau","a.tau","b.tau")
-               found <- has_either_or(reqd_prior_pars[1],
-                                      reqd_prior_pars[-1],
-                                      names(object@priorPars))
+               prPars_names <- names(object@priorPars)
+               found <- (
+                  (("a.tau" %in% prPars_names) & ("b.tau" %in% prPars_names)) ||
+                  ("tau" %in% prPars_names) ||
+                  ("taustd" %in% prPars_names)
+               )
                if (!found) {
                    msg <- c(msg,
-                            sprintf("slot %s must be vector with named element(s) %s, or %s",
-                                    sQuote("priorPars"),
-                                    dQuote(reqd_prior_pars[1]),
-                                    paste(dQuote(reqd_prior_pars[-1]),
-                                          collapse=" and ")))
+                            sprintf("slot %s must be vector with named element(s) tau, taustd or, a.tau and b.tau",
+                                    sQuote("priorPars")))
                }
            },
            modelIndicator = {
@@ -183,8 +184,13 @@ igprior <- function(alpha=.01, lambda=.01) {
     new("msPriorSpec",priorType='nuisancePars',priorDistr='invgamma',priorPars=c(alpha=alpha,lambda=lambda))
 }
 
-momprior <- function(tau, tau.adj=10^6, r=1) {
-    new("msPriorSpec", priorType="coefficients", priorDistr="pMOM", priorPars=c(tau=tau,tau.adj=tau.adj,r=r))
+momprior <- function(taustd=1, tau, tau.adj=10^6, r=1) {
+  if (missing(tau)) {
+    priorPars <- c(taustd=taustd, tau.adj=tau.adj,r=r)
+  } else {
+    priorPars <- c(tau=tau,tau.adj=tau.adj,r=r)
+  }
+  new("msPriorSpec", priorType="coefficients", priorDistr="pMOM", priorPars=priorPars)
 }
 
 imomprior <- function(tau, tau.adj=10^6) {
@@ -195,16 +201,31 @@ emomprior <- function(tau, tau.adj=10^6) {
     new("msPriorSpec", priorType="coefficients", priorDistr="peMOM", priorPars=c(tau=tau, tau.adj=tau.adj))
 }
 
-zellnerprior <- function(tau, tau.adj=10^6) {
-    new("msPriorSpec", priorType="coefficients", priorDistr="zellner", priorPars=c(tau=tau, tau.adj=tau.adj))
+zellnerprior <- function(taustd=1, tau, tau.adj=10^6) {
+  if (missing(tau)) {
+    priorPars <- c(taustd=taustd, tau.adj=tau.adj)
+  } else {
+    priorPars <- c(tau=tau,tau.adj=tau.adj)
+  }
+  new("msPriorSpec", priorType="coefficients", priorDistr="zellner", priorPars=priorPars)
 }
 
-normalidprior <- function(tau, tau.adj=10^6) {
-    new("msPriorSpec", priorType="coefficients", priorDistr="normalid", priorPars=c(tau=tau, tau.adj=tau.adj))
+normalidprior <- function(taustd=1, tau, tau.adj=10^6) {
+  if (missing(tau)) {
+    priorPars <- c(taustd=taustd, tau.adj=tau.adj)
+  } else {
+    priorPars <- c(tau=tau,tau.adj=tau.adj)
+  }
+  new("msPriorSpec", priorType="coefficients", priorDistr="normalid", priorPars=priorPars)
 }
 
-groupmomprior <- function(tau, tau.adj=10^6) {
-    new("msPriorSpec", priorType="coefficients", priorDistr="groupMOM", priorPars=c(tau=tau,tau.adj=tau.adj))
+groupmomprior <- function(taustd=1, tau, tau.adj=10^6) {
+  if (missing(tau)) {
+    priorPars <- c(taustd=taustd, tau.adj=tau.adj)
+  } else {
+    priorPars <- c(tau=tau,tau.adj=tau.adj)
+  }
+  new("msPriorSpec", priorType="coefficients", priorDistr="groupMOM", priorPars=priorPars)
 }
 
 groupimomprior <- function(tau, tau.adj=10^6) {
@@ -215,8 +236,13 @@ groupemomprior <- function(tau, tau.adj=10^6) {
     new("msPriorSpec", priorType="coefficients", priorDistr="groupeMOM", priorPars=c(tau=tau, tau.adj=tau.adj))
 }
 
-groupzellnerprior <- function(tau, tau.adj=10^6) {
-    new("msPriorSpec", priorType="coefficients", priorDistr="groupzellner", priorPars=c(tau=tau, tau.adj=tau.adj))
+groupzellnerprior <- function(taustd=1, tau, tau.adj=10^6) {
+  if (missing(tau)) {
+    priorPars <- c(taustd=taustd, tau.adj=tau.adj)
+  } else {
+    priorPars <- c(tau=tau,tau.adj=tau.adj)
+  }
+  new("msPriorSpec", priorType="coefficients", priorDistr="groupzellner", priorPars=priorPars)
 }
 
 
@@ -225,7 +251,7 @@ modelunifprior <- function() {
 }
 
 modelbinomprior <- function(p=0.5) {
-    new("msPriorSpec",priorType='modelIndicator',priorDistr='binomial',priorPars=c(p=p))
+    new("msPriorSpec",priorType='modelIndicator',priorDistr='binomial',priorPars=list(p=p))
 }
 
 modelbbprior <- function(alpha.p=1, beta.p=1) {

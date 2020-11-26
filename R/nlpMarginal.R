@@ -3,43 +3,49 @@
 ## ROUTINES TO COMPUTE INTEGRATED LIKELIHOODS
 ##
 ##############################################################################################
-family_dict <- list(normal=1, twopiecenormal=2, laplace=3, twopiecelaplace=4)
 
 nlpMarginal <- function(
   sel, y, x, data, smoothterms, nknots=9, groups=1:ncol(x), family="normal",
   priorCoef, priorGroup, priorVar=igprior(alpha=0.01,lambda=0.01),
-  priorSkew=momprior(tau=0.348), method='auto', hess='asymp', optimMethod='CDA',
-  B=10^5, logscale=TRUE, XtX, ytX
+  priorSkew=momprior(tau=0.348), phi, method='auto', adj.overdisp='intercept', hess='asymp',
+  optimMethod, B=10^5, logscale=TRUE, XtX, ytX
 ) {
   #Check input
-  if (!(family %in% c('normal','twopiecenormal','laplace','twopiecelaplace'))) stop("family not recognized, it should be 'normal','twopiecenormal','laplace' or 'twopiecelaplace'")
-  familyint <- as.integer(family_dict[family])
   # format input data
   tmp <- formatInputdata(y=y,x=x,data=data,smoothterms=smoothterms,nknots=nknots,family=family)
   x <- tmp$x; y <- tmp$y; is_formula <- tmp$is_formula
   splineDegree <- tmp$splineDegree
   if (!is.null(tmp$groups)) groups <- tmp$groups
+  hasgroups <- tmp$hasgroups
   if (!is.null(tmp$constraints)) constraints <- tmp$constraints
   outcometype <- tmp$outcometype; uncens <- tmp$uncens; ordery <- tmp$ordery
   typeofvar <- tmp$typeofvar
   p= ncol(x); n= length(y)
   if (missing(XtX)) { XtX <- t(x) %*% x } else { XtX <- as.matrix(XtX) }
   if (missing(ytX)) { ytX <- as.vector(matrix(y,nrow=1) %*% x) } else { ytX <- as.vector(ytX) }
-  sumy2 <- as.double(sum(y^2))
+  sumy2 <- as.double(sum(y^2)); sumy <- as.double(sum(y))
+  colsumsx <- as.double(colSums(x))
+  #
+  familyint= formatFamily(family, issurvival= length(uncens)>0)$familyint
+  if (familyint == 22) { sumlogyfact= as.double(sum(lgamma(y+1))) } else { sumlogyfact= as.double(0) } #Poisson regression
   # check prior and set defaults if necessary
   if (missing(priorCoef)) {
       defaultprior= defaultmom(outcometype=outcometype,family=family)
       priorCoef= defaultprior$priorCoef; priorVar= defaultprior$priorVar
   }
   if (missing(priorGroup)) { if (length(groups)==length(unique(groups))) { priorGroup= priorCoef } else { priorGroup= groupzellnerprior(tau=n) } }
+
+  if (missing(phi)) { knownphi <- as.integer(0); phi <- double(0) } else { knownphi <- as.integer(1); phi <- as.double(phi) }
+
   # format arguments for .Call
-  method= formatmsMethod(method=method, priorCoef=priorCoef, knownphi=0)
-  hesstype <- as.integer(ifelse(hess=='asympDiagAdj',2,1))
-  optimMethod <- as.integer(ifelse(optimMethod=='CDA',2,1))
+  method <- formatmsMethod(method=method, optimMethod=optimMethod, priorCoef=priorCoef, priorGroup=priorGroup, knownphi=0, outcometype=outcometype, family=family, hasgroups=hasgroups, adj.overdisp=adj.overdisp, hess=hess)
+  optimMethod <- method$optimMethod; adj.overdisp <- method$adj.overdisp; hesstype <- method$hesstype; method <- method$method
+  #hesstype <- as.integer(ifelse(hess=='asympDiagAdj',2,1)); optimMethod <- as.integer(ifelse(optimMethod=='CDA',2,1))
+    
   B <- as.integer(B)
   tmp= codeGroupsAndConstraints(p=p,groups=groups)
   ngroups= tmp$ngroups; constraints= tmp$constraints; invconstraints= tmp$invconstraints; nvaringroup=tmp$nvaringroup; groups=tmp$groups
-  tmp= formatmsPriorsMarg(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew)
+  tmp= formatmsPriorsMarg(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew, n=n)
   r= tmp$r; prior= tmp$prior; priorgr= tmp$priorgr; tau=tmp$tau; taugroup=tmp$taugroup; alpha=tmp$alpha; lambda=tmp$lambda; taualpha=tmp$taualpha; fixatanhalpha=tmp$fixatanhalpha
 
   if (!is_formula) {
@@ -51,7 +57,7 @@ nlpMarginal <- function(
     nsel <- length(sel)
   }
 
-  ans <- .Call("nlpMarginalCI", sel, nsel, familyint, prior, priorgr, n, p, y, uncens, sumy2, x, XtX, ytX, method, hesstype, optimMethod, B, alpha, lambda, tau, taugroup, taualpha, fixatanhalpha, r, groups, ngroups, nvaringroup, constraints, invconstraints, logscale)
+  ans <- .Call("nlpMarginalCI", knownphi, sel, nsel, familyint, prior, priorgr, n, p, y, uncens, sumy2, sumy, sumlogyfact, x, colsumsx, XtX, ytX, method, adj.overdisp, hesstype, optimMethod, B, alpha, lambda, tau, taugroup, taualpha, fixatanhalpha, r, groups, ngroups, nvaringroup, constraints, invconstraints, logscale)
   return(ans)
 }
 

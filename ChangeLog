@@ -1,3 +1,21 @@
+CHANGES IN VERSION 2.3.2
+- Added method='ALA' to modelSelection for AFT survival models
+- Implemented asymetric modelbinomprior
+- Fix calibration of groupmomprior
+- Add taustd prior to set dispersion in terms of unit information prior
+
+CHANGES IN VERSION 2.3.1
+- Added option to specify multiple nknots in modelSelection
+- Implement groupzellner prior combinations with MOM, Zellner and normalid
+priors
+- Implement groupmom prior with MOM
+- Fix some inconsistencies between tau and taugroup usage
+
+CHANGES IN VERSION 2.3.0
+- Fixed error in coefByModel (typo in calling postProb)
+- Fixed unnecessary warnings returned by hastPostSamples
+- Fixed error in modelSelection Gibbs when using includevars
+
 CHANGES IN VERSION 2.2.9
 - Fixed NOTE due to specifying non-canonical URL for mombf package
 

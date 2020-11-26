@@ -11,11 +11,13 @@
 #include "cstat.h"
 #include "crossprodmat.h"
 #include "covariancemat.h"
+#include "glm.h"
 #include "modelSel.h"
 #include "modselIntegrals.h"
 #include "modselFunction.h"
 #include "Polynomial.h"
 
+#include <csignal>
 #include <map>
 #include <string>
 
@@ -225,6 +227,8 @@ void testfunction() {
 */
 
 
+
+
 //*************************************************************************************
 //SETTING PRIOR & MARGINALS
 //*************************************************************************************
@@ -233,21 +237,25 @@ void testfunction() {
 int mspriorCode(int *prCoef, int *prGroup, struct marginalPars *pars) {
   //Returns a two-digit code indicating the prior on regression coefficients. The 1st digit is the prior on individual coef; The 2nd digit the prior on groups of coefficients
   // Input
-  // - prCoef: 0 for pMOM; 1 for piMOM; 2 for peMOM; 3 for Zellner; 4 for normalid; 13 for group Zellner
-  // - prGroup: 0 for pMOM; 1 for piMOM; 2 for peMOM; 3 for Zellner; 4 for normalid; 10 for group MOM; 11 for group iMOM; 12 for group eMOM; 13 for group Zellner
+  // - prCoef: 0 for pMOM; 1 for piMOM; 2 for peMOM; 3 for Zellner; 4 for normalid; 10 for group pMOM; 13 for group Zellner
+  // - prGroup: 0 for pMOM; 1 for piMOM; 2 for peMOM; 3 for Zellner; 4 for normalid; 10 for group pMOM; 11 for group iMOM; 12 for group eMOM; 13 for group Zellner
   // Output
   //   0: pMOM on all coef
   //   1: peMOM on all coef
   //   2: piMOM on all coef
   //   3: Zellner on all coef
   //   4: normalid on all coef
+  //   5: group pMOM (same as pMOM, standardized by n / X'X)
   //   9: group Zellner on all coef
   //  10: pMOM + group MOM
   //  13: pMOM + group Zellner
   //  32: peMOM + group eMOM
   //  33: peMOM + group Zellner
   //  43: Zellner + group Zellner
-  //  53: group Zellner + group Zellner
+  //  50: group MOM + group MOM
+  //  53: group MOM + group Zellner
+  //  63: group Zellner + group Zellner
+  //  73: normalid + group Zellner
   bool hasgroups= (*((*pars).ngroups)) < (*((*pars).p));
   int ans;
   if (!hasgroups) {
@@ -261,6 +269,8 @@ int mspriorCode(int *prCoef, int *prGroup, struct marginalPars *pars) {
       ans= 3;
     } else if (*prCoef==4) { //normalid on all coef
       ans= 4;
+    } else if (*prCoef==10) {
+      ans= 5;                //group pMOM 
     } else if (*prCoef==13) { //block Zellner on all coef
       ans= 9;
     } else {
@@ -287,10 +297,14 @@ int mspriorCode(int *prCoef, int *prGroup, struct marginalPars *pars) {
       ans= 33;
     } else if ((*prCoef==3) & (*prGroup==13)) { //Zellner + group Zellner
       ans= 43;
-    } else if ((*prCoef==4) & (*prGroup==13)) { //normalid + group Zellner
-      ans= 58;
-    } else if ((*prCoef==13) & (*prGroup==13)) { //group Zellner + group Zellner
+    } else if ((*prCoef==10) & (*prGroup==10)) { //group pMOM + group pMOM
+      ans= 50;
+    } else if ((*prCoef==10) & (*prGroup==13)) { //group pMOM + group Zellner
       ans= 53;
+    } else if ((*prCoef==13) & (*prGroup==13)) { //group Zellner + group Zellner
+      ans= 63;
+    } else if ((*prCoef==4) & (*prGroup==13)) { //normalid + group Zellner
+      ans= 73;
     } else {
       Rf_error("Prior specified by priorCoef and priorGroup not currently implemented\n");
     }
@@ -298,118 +312,141 @@ int mspriorCode(int *prCoef, int *prGroup, struct marginalPars *pars) {
   return ans;
 }
 
-pt2margFun set_marginalFunction(int *priorcode, int *knownphi, int *family, struct marginalPars *pars) {
-  //Returns pointer to function to compute the marginal density of the data for a given model indicator
-  // - priorcode: prior code returned by mspriorCode
-  // - knownphi: 1 if residual variance phi is known, 0 otherwise. knownphi==1 currently only allowed for Normal errors
-  // - family: distribution of errors. 1 for Normal, 2 for two-piece Normal; 3 for Laplace,; 4 for two-piece Laplace, 0 for auto
-  // Note: if phi known, when actually calling the returned pt2margFun, phi must be set in the parameter of type struct marginalPars *
+pt2margFun set_marginalFunction(struct marginalPars *pars) {
+  /*Returns pointer to function to compute the marginal density of the data for a given model indicator
+
+   - priorcode: prior code returned by mspriorCode
+   - knownphi: 1 if residual variance phi is known, 0 otherwise. knownphi==1 currently only allowed for Normal errors
+   - family: parametric family
+       1 for Normal, 2 for two-piece Normal; 3 for Laplace; 4 for two-piece Laplace, 0 to infer family within 1-4
+       11 for AFT survival
+       21 for logistic regression
+       22 for Poisson regression
+
+  Note: if phi known, when actually calling the returned pt2margFun, phi must be set in the parameter of type struct marginalPars *
+  */
   bool hasgroups= (*((*pars).ngroups)) < (*((*pars).p));
+  int priorcode= *((*pars).priorcode), family= *((*pars).family), knownphi= *((*pars).knownphi);
   pt2margFun ans=NULL;
-  if ((*family)==1) {  //Normal errors
-    if (*priorcode==0) {
-      if (*knownphi==1) { ans= pmomMarginalKC; } else { ans= pmomMarginalUC; }
-    } else if (*priorcode==1) {
-      if (*knownphi==1) { ans= pimomMarginalKC; } else { ans= pimomMarginalUC; }
-    } else if (*priorcode==2) {
-      if (*knownphi==1) { ans= pemomMarginalKC; } else { ans= pemomMarginalUC; }
-    } else if (*priorcode==3) {
-      if (*knownphi==1) { ans= zellnerMarginalKC; } else { ans= zellnerMarginalUC; }
-    } else if (*priorcode==4) {
-      if (*knownphi==1) { ans= normalidMarginalKC; } else { ans= normalidMarginalUC; }
-    } else if (*priorcode==10) {
+  if ((family)==1) {  //Normal errors
+    if (priorcode==0) {
+      if (knownphi==1) { ans= pmomMarginalKC; } else { ans= pmomMarginalUC; }
+    } else if (priorcode==1) {
+      if (knownphi==1) { ans= pimomMarginalKC; } else { ans= pimomMarginalUC; }
+    } else if (priorcode==2) {
+      if (knownphi==1) { ans= pemomMarginalKC; } else { ans= pemomMarginalUC; }
+    } else if (priorcode==3) {
+      if (knownphi==1) { ans= zellnerMarginalKC; } else { ans= zellnerMarginalUC; }
+    } else if (priorcode==4) {
+      if (knownphi==1) { ans= normalidMarginalKC; } else { ans= normalidMarginalUC; }
+    } else if (priorcode==10) {
       ans= pmomgmomMarg;
-    } else if (*priorcode==13) {
+    } else if (priorcode==13) {
       ans= pmomgzellMarg;
-    } else if (*priorcode==32) {
+    } else if (priorcode==32) {
       ans= pemomgemomMarg;
-    } else if (*priorcode==33) {
+    } else if (priorcode==33) {
       ans= pemomgzellMarg;
-    } else if (*priorcode==43) {
+    } else if (priorcode==43) {
       ans= zellgzellMarg;
-    } else if (*priorcode==58) {
+    } else if (priorcode==73) {
       ans= normidgzellMarg;
     } else {
       Rf_error("The prior in (priorCoef,priorGroup) not currently implemented for linear regression");
     }
-  } else if ((*family)==11) {  //AFT survival with Normal errors
+  } else if ((family)==11) {  //AFT survival with Normal errors
     if (!hasgroups) {
-      if (*priorcode==0) {
+      if (priorcode==0) {
         ans= pmomgzellSurvMarg;
-      } else if (*priorcode==1) {
+      } else if (priorcode==1) {
         ans= pemomgzellSurvMarg;
-      } else if (*priorcode==3) {
+      } else if (priorcode==3) {
         Rprintf("Zellner prior not implemented, using group Zellner prior instead\n");
         ans= gzellgzellSurvMarg;
-      } else if (*priorcode==9) {
+      } else if (priorcode==5) {
+        ans= gmomgmomSurvMarg;
+      } else if (priorcode==9) {
         ans= gzellgzellSurvMarg;
       } else {
         Rf_error("The prior in priorCoef not implemented for the specified AFT model");
       }
     } else {
-      if (*priorcode==10) {
+      if (priorcode==10) {
         ans= pmomgmomSurvMarg;
-      } else if (*priorcode==13) {
+        if (*(*pars).method !=2) Rprintf("For priorCoef=groupmomprior() + priorGroups=groupmomprior() only method='ALA' is implemented. Using ALA instead.\n");
+      } else if (priorcode==13) {
         ans= pmomgzellSurvMarg;
-      } else if (*priorcode==32) {
+      } else if (priorcode==32) {
         ans= pemomgemomSurvMarg;
-      } else if (*priorcode==33) {
+      } else if (priorcode==33) {
         ans= pemomgzellSurvMarg;
-      } else if (*priorcode==43) {
+      } else if (priorcode==43) {
         Rprintf("Zellner prior not implemented, using group Zellner prior instead\n");
         ans= gzellgzellSurvMarg;
-      } else if (*priorcode==53) {
+      } else if (priorcode==50) {
+        if (*(*pars).method !=2) Rprintf("For priorCoef=groupmomprior() + priorGroups=groupzellnerprior() only method='ALA' is implemented. Using ALA instead.\n");
+        ans= gmomgmomSurvMarg;
+      } else if (priorcode==53) {
+        if (*(*pars).method !=2) Rprintf("For priorCoef=groupmomprior() + priorGroups=groupzellnerprior() only method='ALA' is implemented. Using ALA instead. You can set method='Laplace' for priorCoef=momprior() + priorGroups=groupzellnerprior()\n");
+        ans= gmomgzellSurvMarg;
+      } else if (priorcode==63) {
         ans= gzellgzellSurvMarg;
       } else {
         Rf_error("The prior in (priorCoef,priorGroup) not implemented for survival data\n");
       }
     }
-  } else if ((*family)==2) { //Two-piece Normal errors
-    if (*priorcode >= 10) Rf_error("Group priors not implemented for Two-piece Normal errors");
-    if (*priorcode==0) {
+  } else if ((family)==2) { //Two-piece Normal errors
+    if (priorcode >= 10) Rf_error("Group priors not implemented for Two-piece Normal errors");
+    if (priorcode==0) {
       ans= pmomMargSkewNormU;
-    } else if (*priorcode==1) {
+    } else if (priorcode==1) {
       ans= pimomMargSkewNormU;
-    } else if (*priorcode==2) {
+    } else if (priorcode==2) {
       ans= pemomMargSkewNormU;
-    } else if (*priorcode==3) {
+    } else if (priorcode==3) {
       Rf_error("Zellner prior with two-piece Normal errors not currently implemented");
     }
-  } else if ((*family)==3) { //Laplace errors
-    if (*priorcode >= 10) Rf_error("Group priors not implemented for Laplace errors");
-    if (*priorcode==0) {
+  } else if ((family)==3) { //Laplace errors
+    if (priorcode >= 10) Rf_error("Group priors not implemented for Laplace errors");
+    if (priorcode==0) {
       ans= pmomMargLaplU;
-    } else if (*priorcode==1) {
+    } else if (priorcode==1) {
       ans= pimomMargLaplU;
-    } else if (*priorcode==2) {
+    } else if (priorcode==2) {
       ans= pemomMargLaplU;
-    } else if (*priorcode==3) {
+    } else if (priorcode==3) {
       Rf_error("Zellner prior with Laplace errors not currently implemented");
     }
-  } else if ((*family)==4) { //Asymmetric Laplace errors
-    if (*priorcode >= 10) Rf_error("Group priors not implemented for asymmetric Laplace errors");
-    if (*priorcode==0) {
+  } else if ((family)==4) { //Asymmetric Laplace errors
+    if (priorcode >= 10) Rf_error("Group priors not implemented for asymmetric Laplace errors");
+    if (priorcode==0) {
       ans= pmomMargAlaplU;
-    } else if (*priorcode==1) {
+    } else if (priorcode==1) {
       ans= pimomMargAlaplU;
-    } else if (*priorcode==2) {
+    } else if (priorcode==2) {
       ans= pemomMargAlaplU;
-    } else if (*priorcode==3) {
+    } else if (priorcode==3) {
       Rf_error("Zellner prior with asymmetric Laplace errors not currently implemented");
     }
-  } else if ((*family)==0) { //Normal + Two-piece Normal + Laplace + Two-piece Laplace errors
-    if (*priorcode >= 10) Rf_error("Group priors with family='auto' not currently implemented");
-    if (*priorcode==0) {
+  } else if ((family)==0) { //Normal + Two-piece Normal + Laplace + Two-piece Laplace errors
+    if (priorcode >= 10) Rf_error("Group priors with family='auto' not currently implemented");
+    if (priorcode==0) {
       ans= pmomMargTP;
-    } else if (*priorcode==1) {
+    } else if (priorcode==1) {
       ans= pimomMargTP;
-    } else if (*priorcode==2) {
+    } else if (priorcode==2) {
       ans= pemomMargTP;
-    } else if (*priorcode==3) {
+    } else if (priorcode==3) {
       Rf_error("Zellner prior with family='auto' not currently implemented");
     }
+  } else if ((family>=21) && (family<=22)) {  //Logistic or Poisson regression
+    if ((priorcode == 3) || (priorcode==43)) {
+      Rprintf("Zellner prior not implemented for GLMs. Using group Zellner instead\n");
+      *((*pars).priorcode)= 63;
+    }
+    ans= marginal_glm;
   } else {
-    Rf_error("This error distribution is not available");
+    Rf_error("This distribution family is not available");
   }
   return ans;
 }
@@ -886,20 +923,25 @@ double simTaupmom(int *nsel, int *curModel, double *curCoef1, double *curPhi, st
 // GENERAL MARGINAL DENSITY CALCULATION ROUTINES
 //********************************************************************************************
 
-void set_marginalPars(struct marginalPars *pars, int *n,int *nuncens,int *p,double *y,int *uncens,double *sumy2,double *x,crossprodmat *XtX,double *ytX,int *method,int *hesstype,int *optimMethod,int *usethinit,double *thinit,int *B,double *alpha,double *lambda,double *phi,double *tau,double *taugroup,double *taualpha, double *fixatanhalpha, int *r,double *prDeltap,double *parprDeltap, double *prConstrp,double *parprConstrp, int *logscale, double *offset, int *groups, int *isgroup, int *ngroups, int *ngroupsconstr, int *nvaringroup, int *nconstraints=NULL, int *ninvconstraints=NULL, crossprodmat *XtXuncens=NULL, double *ytXuncens=NULL) {
+void set_marginalPars(struct marginalPars *pars, int *family, int *n,int *nuncens,int *p,double *y,int *uncens,double *sumy2,double *sumy,double *sumlogyfact,double *x,double *colsumsx,crossprodmat *XtX,double *ytX,int *method,int *adjoverdisp,int *hesstype,int *optimMethod,int *usethinit,double *thinit,int *B,double *alpha,double *lambda,int *knownphi,double *phi,double *tau,double *taugroup,double *taualpha, double *fixatanhalpha, int *r,double *prDeltap,double *parprDeltap, double *prConstrp,double *parprConstrp, int *logscale, double *offset, int *groups, int *isgroup, int *ngroups, int *ngroupsconstr, int *nvaringroup, int *nconstraints=NULL, int *ninvconstraints=NULL, crossprodmat *XtXuncens=NULL, double *ytXuncens=NULL) {
+  (*pars).family= family;
   (*pars).n= n;
   (*pars).nuncens= nuncens;
   (*pars).p= p;
   (*pars).y= y;
   (*pars).uncens= uncens;
   (*pars).sumy2= sumy2;
+  (*pars).sumy= sumy;
+  (*pars).sumlogyfact= sumlogyfact;
   (*pars).x= x;
+  (*pars).colsumsx= colsumsx;
   (*pars).XtX= XtX;
   (*pars).ytX= ytX;
   (*pars).XtXuncens= XtXuncens;
   (*pars).ytXuncens= ytXuncens;
   (*pars).V0inv = new covariancemat(*p);
   (*pars).method= method;
+  (*pars).adjoverdisp= adjoverdisp;
   (*pars).hesstype= hesstype;
   (*pars).optimMethod= optimMethod;
   (*pars).usethinit= usethinit;
@@ -907,6 +949,7 @@ void set_marginalPars(struct marginalPars *pars, int *n,int *nuncens,int *p,doub
   (*pars).B= B;
   (*pars).alpha= alpha;
   (*pars).lambda= lambda;
+  (*pars).knownphi= knownphi;
   (*pars).phi= phi;
   (*pars).tau= tau;
   (*pars).taugroup= taugroup;
@@ -990,10 +1033,10 @@ void set_f2int_pars(crossprodmat *XtX, double *ytX, double *tau, int *n, int *p,
 // - postModeProb: unnormalized posterior prob of posterior mode (log scale)
 // - postProb: unnormalized posterior prob of each visited model (log scale)
 
-SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Sx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
+SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Ssumy, SEXP Ssumlogyfact, SEXP Sx, SEXP Scolsumsx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Sadjoverdisp, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
 
   bool hasXtX= LOGICAL(ShasXtX)[0];
-  int i, j, idxj, logscale=1, *postMode, mycols, mycols2, nuncens, *nconstraints, *ninvconstraints, ngroupsconstr=0, *isgroup, usethinit=0;
+  int i, j, idxj, logscale=1, *postMode, mycols, mycols2, nuncens, *nconstraints, *ninvconstraints, ngroupsconstr=0, *isgroup, usethinit=0, priorcode;
   double offset=0, *postModeProb, *postProb, *ytXuncens=NULL, *thinit=NULL;
   intptrvec constraints, invconstraints;
   crossprodmat *XtX, *XtXuncens=NULL;
@@ -1002,6 +1045,10 @@ SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfam
 
   PROTECT(ans= Rf_allocVector(VECSXP, 3));
   if (INTEGER(Sfamily)[0] !=0) { mycols= mycols2= INTEGER(Sp)[0]; } else { mycols= 2 + INTEGER(Sp)[0]; mycols2= mycols+2; }
+
+  //Allocate memory to thinit, to safeguard against cases where subroutines use it, despite usethinit==0
+  thinit= dvector(0, mycols2+1);
+  for (j=0; j<= mycols2+1; j++) { thinit[j]= 0; }
 
   SET_VECTOR_ELT(ans, 0, Rf_allocVector(INTSXP, mycols));
   postMode= INTEGER(VECTOR_ELT(ans,0));
@@ -1031,13 +1078,17 @@ SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfam
     for (j=0; j< INTEGER(Sp)[0]; j++) { for (i=0, ytXuncens[j]=0, idxj=j*n; i< nuncens; i++) { ytXuncens[j] += pty[i] * ptx[i + idxj]; } }
   } else { nuncens= INTEGER(Sn)[0]; }
 
-  set_marginalPars(&pars, INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Sx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha),REAL(Slambda), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens, ytXuncens);
 
-  modelSelectionEnum(postMode, postModeProb, postProb, INTEGER(Snmodels), INTEGER(Smodels), INTEGER(Sknownphi), INTEGER(Sfamily), INTEGER(SpriorCoef), INTEGER(SpriorGroup), INTEGER(SpriorDelta), INTEGER(SpriorConstr), INTEGER(Sverbose), &pars);
+  set_marginalPars(&pars, INTEGER(Sfamily), INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Ssumy), REAL(Ssumlogyfact), REAL(Sx), REAL(Scolsumsx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Sadjoverdisp), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha),REAL(Slambda), INTEGER(Sknownphi), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens, ytXuncens);
+
+  priorcode = mspriorCode(INTEGER(SpriorCoef), INTEGER(SpriorGroup), &pars);
+  pars.priorcode= &priorcode;
+
+  modelSelectionEnum(postMode, postModeProb, postProb, INTEGER(Snmodels), INTEGER(Smodels), INTEGER(SpriorDelta), INTEGER(SpriorConstr), INTEGER(Sverbose), &pars);
 
   delete XtX;
   free_ivector(nconstraints, 0,INTEGER(Sngroups)[0]); free_ivector(ninvconstraints, 0,INTEGER(Sngroups)[0]);
-  free_ivector(isgroup, 0, INTEGER(Sp)[0]);
+  free_dvector(thinit, 0,mycols2+1); free_ivector(isgroup, 0, INTEGER(Sp)[0]);
   if (LENGTH(Suncens)>0) { delete XtXuncens; free_dvector(ytXuncens,0,INTEGER(Sp)[0]); }
   UNPROTECT(1);
   return ans;
@@ -1045,15 +1096,14 @@ SEXP modelSelectionEnumCI(SEXP Snmodels, SEXP Smodels, SEXP Sknownphi, SEXP Sfam
 
 
 
-void modelSelectionEnum(int *postMode, double *postModeProb, double *postProb, int *nmodels, int *models, int *knownphi, int *family, int *prCoef, int *prGroup, int *prDelta, int *prConstr, int *verbose, struct marginalPars *pars) {
+void modelSelectionEnum(int *postMode, double *postModeProb, double *postProb, int *nmodels, int *models, int *prDelta, int *prConstr, int *verbose, struct marginalPars *pars) {
 
-  int i, j, *sel, nsel, nselplus1, niter10, nbvars, nbfamilies=4, postModeidx, priorcode;
+  int i, j, *sel, nsel, nselplus1, niter10, nbvars, nbfamilies=4, postModeidx, *family= (*pars).family;
   double *mfamily, *pfamily;
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
   modselIntegrals *integrals;
 
-  priorcode= mspriorCode(prCoef, prGroup, pars);
-  marginalFunction= set_marginalFunction(&priorcode, knownphi, family, pars);
+  marginalFunction= set_marginalFunction(pars);
   priorFunction= set_priorFunction(prDelta, prConstr, family);
 
   mfamily= dvector(0,nbfamilies-1); pfamily= dvector(0,nbfamilies-1);
@@ -1122,10 +1172,10 @@ void modelSelectionEnum(int *postMode, double *postModeProb, double *postProb, i
 // - postModeProb: unnormalized posterior prob of posterior mode (log scale)
 // - postProb: unnormalized posterior prob of each visited model (log scale)
 
-SEXP modelSelectionGibbsCI(SEXP SpostModeini, SEXP SpostModeiniProb, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sniter, SEXP Sthinning, SEXP Sburnin, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Sx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
+SEXP modelSelectionGibbsCI(SEXP SpostModeini, SEXP SpostModeiniProb, SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sniter, SEXP Sthinning, SEXP Sburnin, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Ssumy, SEXP Ssumlogyfact, SEXP Sx, SEXP Scolsumsx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Sadjoverdisp, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
 
   bool hasXtX= LOGICAL(ShasXtX)[0];
-  int i, j, idxj, logscale=1, mcmc2save, *postSample, *postMode, mycols, mycols2, *nconstraints, *ninvconstraints, nuncens, ngroupsconstr=0, *isgroup, usethinit=1;
+  int i, j, idxj, logscale=1, mcmc2save, *postSample, *postMode, mycols, mycols2, *nconstraints, *ninvconstraints, nuncens, ngroupsconstr=0, *isgroup, usethinit=1, priorcode;
   double offset=0, *margpp, *postModeProb, *postProb, *ytXuncens=NULL, *thinit;
   intptrvec constraints, invconstraints;
   crossprodmat *XtX, *XtXuncens=NULL;
@@ -1175,9 +1225,12 @@ SEXP modelSelectionGibbsCI(SEXP SpostModeini, SEXP SpostModeiniProb, SEXP Sknown
     for (j=0; j< INTEGER(Sp)[0]; j++) { for (i=0, ytXuncens[j]=0, idxj=j*n; i< nuncens; i++) { ytXuncens[j] += pty[i] * ptx[i + idxj]; } }
   } else { nuncens= INTEGER(Sn)[0]; }
 
-  set_marginalPars(&pars, INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Sx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha),REAL(Slambda), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens,ytXuncens);
+  set_marginalPars(&pars, INTEGER(Sfamily), INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Ssumy), REAL(Ssumlogyfact), REAL(Sx), REAL(Scolsumsx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Sadjoverdisp), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha),REAL(Slambda), INTEGER(Sknownphi), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens, ytXuncens);
 
-  modelSelectionGibbs(postSample, margpp, postMode, postModeProb, postProb, INTEGER(Sknownphi), INTEGER(Sfamily), INTEGER(SpriorCoef), INTEGER(SpriorGroup), INTEGER(SpriorDelta), INTEGER(SpriorConstr), INTEGER(Sniter), INTEGER(Sthinning), INTEGER(Sburnin), INTEGER(Sndeltaini), INTEGER(Sdeltaini), INTEGER(Sincludevars), &constraints, &invconstraints, INTEGER(Sverbose), &pars);
+  priorcode = mspriorCode(INTEGER(SpriorCoef), INTEGER(SpriorGroup), &pars);
+  pars.priorcode= &priorcode;
+
+  modelSelectionGibbs(postSample, margpp, postMode, postModeProb, postProb, INTEGER(SpriorDelta), INTEGER(SpriorConstr), INTEGER(Sniter), INTEGER(Sthinning), INTEGER(Sburnin), INTEGER(Sndeltaini), INTEGER(Sdeltaini), INTEGER(Sincludevars), &constraints, &invconstraints, INTEGER(Sverbose), &pars);
 
   free_dvector(thinit, 0,mycols2+1);   free_ivector(isgroup, 0, INTEGER(Sp)[0]);
   free_ivector(nconstraints, 0,INTEGER(Sngroups)[0]); free_ivector(ninvconstraints, 0,INTEGER(Sngroups)[0]);
@@ -1189,10 +1242,10 @@ SEXP modelSelectionGibbsCI(SEXP SpostModeini, SEXP SpostModeiniProb, SEXP Sknown
 
 
 
-void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double *postModeProb, double *postProb, int *knownphi, int *family, int *prCoef, int *prGroup, int *prDelta, int *prConstr, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *includevars, intptrvec *constraints, intptrvec *invconstraints, int *verbose, struct marginalPars *pars) {
+void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double *postModeProb, double *postProb, int *prDelta, int *prConstr, int *niter, int *thinning, int *burnin, int *ndeltaini, int *deltaini, int *includevars, intptrvec *constraints, intptrvec *invconstraints, int *verbose, struct marginalPars *pars) {
 
   bool copylast, validmodel, nonbinary=false;
-  int i, j, jgroup, jgroup2, k, niter10, niterthin, savecnt, ilow, iupper, nbvars, nbfamilies=4, curfamily, newfamily, ngroups, *nvaringroup, *firstingroup, priorcode, *nconstraints= (*pars).nconstraints, *ninvconstraints= (*pars).ninvconstraints;
+  int i, j, jgroup, jgroup2, k, niter10, niterthin, savecnt, ilow, iupper, nbvars, nbfamilies=4, curfamily, newfamily, ngroups, *nvaringroup, *firstingroup, *nconstraints= (*pars).nconstraints, *ninvconstraints= (*pars).ninvconstraints, *family= (*pars).family;
   int *addgroups, *dropgroups, naddgroups, ndropgroups, *modelidx, *sample;
   int nsel, nselnew, nselnew2, nselnew3, *sel, *selnew, *selnew2, *selnew3, nselplus1, *selaux;
   double currentJ, *newJ, *ppnew, ppnewsum, u, *mfamily, *pfamily, sumpfamily;
@@ -1200,8 +1253,7 @@ void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double 
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
   modselIntegrals *integrals;
 
-  priorcode= mspriorCode(prCoef, prGroup, pars);
-  marginalFunction= set_marginalFunction(&priorcode, knownphi, family, pars);
+  marginalFunction= set_marginalFunction(pars);
   priorFunction= set_priorFunction(prDelta, prConstr, family);
 
   addgroups= ivector(0,1); dropgroups= ivector(0,1); newJ= dvector(0,2); ppnew= dvector(0,3); modelidx= ivector(0,3);
@@ -1452,10 +1504,10 @@ void modelSelectionGibbs(int *postSample, double *margpp, int *postMode, double 
 //               Similar to Gibbs sampling, except that deterministic updates are made iff there is an increase in post model prob
 //               The scheme proceeds until no variable is included/excluded or niter iterations are reached
 // Input arguments: same as in modelSelectionC.
-SEXP greedyVarSelCI(SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sniter, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Sx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
+SEXP greedyVarSelCI(SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGroup, SEXP Sniter, SEXP Sndeltaini, SEXP Sdeltaini, SEXP Sincludevars, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Suncens, SEXP Ssumy2, SEXP Ssumy, SEXP Ssumlogyfact, SEXP Sx, SEXP Scolsumsx, SEXP ShasXtX, SEXP SXtX, SEXP SytX, SEXP Smethod, SEXP Sadjoverdisp, SEXP Shesstype, SEXP SoptimMethod, SEXP SB, SEXP Salpha, SEXP Slambda, SEXP Sphi, SEXP Stau, SEXP Staugroup, SEXP Staualpha, SEXP Sfixatanhalpha, SEXP Sr, SEXP SpriorDelta, SEXP SprDeltap, SEXP SparprDeltap, SEXP SpriorConstr, SEXP SprConstrp, SEXP SparprConstrp, SEXP Sgroups, SEXP Sngroups, SEXP Snvaringroup, SEXP Sconstraints, SEXP Sinvconstraints, SEXP Sverbose) {
 
   bool hasXtX= LOGICAL(ShasXtX)[0];
-  int i, j, idxj, logscale=1, mycols, *postMode, *nconstraints, *ninvconstraints, nuncens, ngroupsconstr=0, *isgroup, usethinit=1;
+  int i, j, idxj, logscale=1, mycols, *postMode, *nconstraints, *ninvconstraints, nuncens, ngroupsconstr=0, *isgroup, usethinit=1, priorcode;
   double offset=0, *postModeProb, *ytXuncens=NULL, *thinit;
   intptrvec constraints, invconstraints;
   crossprodmat *XtX, *XtXuncens=NULL;
@@ -1493,9 +1545,12 @@ SEXP greedyVarSelCI(SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGr
     for (j=0; j< INTEGER(Sp)[0]; j++) { for (i=0, ytXuncens[j]=0, idxj=j*n; i< nuncens; i++) { ytXuncens[j] += pty[i] * ptx[i + idxj]; } }
   } else { nuncens= INTEGER(Sn)[0]; }
 
-  set_marginalPars(&pars, INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Sx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha),REAL(Slambda), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens, ytXuncens);
+  set_marginalPars(&pars, INTEGER(Sfamily), INTEGER(Sn), &nuncens, INTEGER(Sp), REAL(Sy), INTEGER(Suncens), REAL(Ssumy2), REAL(Ssumy), REAL(Ssumlogyfact), REAL(Sx), REAL(Scolsumsx), XtX, REAL(SytX), INTEGER(Smethod), INTEGER(Sadjoverdisp), INTEGER(Shesstype), INTEGER(SoptimMethod), &usethinit, thinit, INTEGER(SB), REAL(Salpha), REAL(Slambda), INTEGER(Sknownphi), REAL(Sphi), REAL(Stau), REAL(Staugroup), REAL(Staualpha), REAL(Sfixatanhalpha), INTEGER(Sr), REAL(SprDeltap), REAL(SparprDeltap), REAL(SprConstrp), REAL(SparprConstrp), &logscale, &offset, INTEGER(Sgroups), isgroup, INTEGER(Sngroups), &ngroupsconstr, INTEGER(Snvaringroup), nconstraints, ninvconstraints, XtXuncens, ytXuncens);
 
-  greedyVarSelC(postMode,postModeProb,INTEGER(Sknownphi),INTEGER(Sfamily),INTEGER(SpriorCoef),INTEGER(SpriorGroup),INTEGER(SpriorDelta),INTEGER(SpriorConstr),INTEGER(Sniter),INTEGER(Sndeltaini),INTEGER(Sdeltaini),INTEGER(Sincludevars),&constraints,&invconstraints,INTEGER(Sverbose),&pars);
+  priorcode = mspriorCode(INTEGER(SpriorCoef), INTEGER(SpriorGroup), &pars);
+  pars.priorcode= &priorcode;
+
+  greedyVarSelC(postMode,postModeProb,INTEGER(SpriorDelta),INTEGER(SpriorConstr),INTEGER(Sniter),INTEGER(Sndeltaini),INTEGER(Sdeltaini),INTEGER(Sincludevars),&constraints,&invconstraints,INTEGER(Sverbose),&pars);
 
   free_dvector(thinit, 0,mycols+1); free_ivector(isgroup, 0, INTEGER(Sp)[0]);
   free_ivector(nconstraints, 0,INTEGER(Sngroups)[0]); free_ivector(ninvconstraints, 0,INTEGER(Sngroups)[0]);
@@ -1505,14 +1560,13 @@ SEXP greedyVarSelCI(SEXP Sknownphi, SEXP Sfamily, SEXP SpriorCoef, SEXP SpriorGr
 
 }
 
-void greedyVarSelC(int *postMode, double *postModeProb, int *knownphi, int *family, int *prCoef, int *prGroup, int *prDelta, int *prConstr, int *niter, int *ndeltaini, int *deltaini, int *includevars, intptrvec *constraints, intptrvec *invconstraints, int *verbose, struct marginalPars *pars) {
+void greedyVarSelC(int *postMode, double *postModeProb, int *prDelta, int *prConstr, int *niter, int *ndeltaini, int *deltaini, int *includevars, intptrvec *constraints, intptrvec *invconstraints, int *verbose, struct marginalPars *pars) {
 
-  int i, j, k, l, jgroup, *sel, *selnew, *selaux, nsel, nselnew, nchanges, ngroups, *nvaringroup, *firstingroup, priorcode, *nconstraints= (*pars).nconstraints;
+  int i, j, k, l, jgroup, *sel, *selnew, *selaux, nsel, nselnew, nchanges, ngroups, *nvaringroup, *firstingroup, *nconstraints= (*pars).nconstraints, *family= (*pars).family;
   double newJ;
   pt2margFun marginalFunction=NULL, priorFunction=NULL; //same as double (*marginalFunction)(int *, int *, struct marginalPars *);
 
-  priorcode= mspriorCode(prCoef, prGroup, pars);
-  marginalFunction= set_marginalFunction(&priorcode, knownphi, family, pars);
+  marginalFunction= set_marginalFunction(pars);
   priorFunction= set_priorFunction(prDelta, prConstr, family);
   sel= ivector(0,*(*pars).p); selnew= ivector(0,*(*pars).p);
 
@@ -1820,6 +1874,91 @@ void countConstraints(int *nconstraints, intptrvec *constraints, int *ninvconstr
 
 
 
+/* ALA orthogonal approximation to posterior expectation of pMOM penalty on individual coefficients (grouped coefficients are not penalized, for that see gmompenalty_approx below)
+
+   The MOM prior across individual coefficients g is theta ~ prod_g theta_g^2 / tau N(theta; 0, tau)
+
+   The ALA approximation is    prod_g (thopt_g^2 + 1/Hinv_g) / tau, where thopt is the posterior mode the underlying normal prior, and Hinv the inverse of the posterior hessian at thopt
+
+   INPUT
+   - thopt: posterior mode under the underlying Normal prior
+   - Hinv: inverse of posterior hessian at thopt
+   - thlength: length of thopt
+   - nvaringroups: number of variables in each selected group, as returned by function cholSini_indexes
+   - firstingroup: index of first variable in each group, as returned by function cholSini_indexes
+*/
+
+double pmompenalty_approx(double *thopt, double **Hinv, double *tau, int thlength, double *nvaringroups, double *firstingroup) {
+  int i, idx;
+  double ans= 0, logtau= log(*tau);
+  for (i=0; i< thlength; i++) {
+    if (nvaringroups[i] < 1.1) {
+      idx= (int) (firstingroup[i]+.1);
+      ans += log(thopt[idx]*thopt[idx] + Hinv[idx+1][idx+1]) - logtau;
+    }
+  }
+  return ans;
+}
+
+/* ALA orthogonal approximation to posterior expectation of group MOM penalty. 
+
+   The MOM prior across individual/grouped coefficients g is theta ~ prod_g (theta_g' Sinv theta_g) / phi N(theta; 0, phi Sinv^{-1})
+
+   The ALA approximation is    prod_g trace(Sinv_g %*% Hinv_g) + thopt' Sinv thopt / phi, where thopt is the posterior mode the underlying normal prior, and Hinv the inverse of the posterior hessian at thopt
+
+   INPUT
+   - momsingle: if true, the MOM penalty is computed across individual coefficients
+   - momgroup: if true, the MOM penalty is computed across grouped coefficients
+   - thopt: posterior mode under the underlying Normal prior
+   - Hinv: inverse of posterior hessian at thopt
+   - phi: prior dispersion parameter, assumed known
+   - thlength: length of thopt
+   - nsel: number of parameters in theta
+   - nselgroups: number of groups in theta
+   - nvaringroups: number of variables in each selected group, as returned by function cholSini_indexes
+   - firstingroup: index of first variable in each group, as returned by function cholSini_indexes
+   - cholSini: Cholesky decomposition of S, as returned by function cholSini_indexes
+*/
+
+double gmompenalty_approx(bool momsingle, bool momgroup, double *thopt, double **Hinv, double *Sinv, double phi, int thlength, int nsel, int nselgroups, double *nvaringroups, double *firstingroup, double *cholSini) {
+
+  int i, j, groupid, ningroup, idx;
+  double ans=0, trgroup, th2group, Sij;
+
+    //For each group, compute trace(Sinv %*% Hinv) + thopt' Sinv thopt / phi
+    for (groupid=0; groupid< nselgroups; groupid++) {
+
+      ningroup= (int) (nvaringroups[groupid] +.1);
+
+      if (((ningroup==1) && momsingle) || ((ningroup>1) && momgroup)) {  //if MOM prior was set on the current group
+        idx= (int) (firstingroup[groupid]+.1);
+         
+        trgroup= th2group= 0;
+        for (i=1; i<=ningroup; i++) {
+          Sij= getelem_Sinv(groupid, i, i, Sinv, cholSini, ningroup);
+          trgroup += Sij * Hinv[idx+i][idx+i];
+          th2group += thopt[idx + i -1] * thopt[idx + i -1] * Sij;
+          for (j=i+1; j<=ningroup; j++) {
+            Sij= getelem_Sinv(groupid, i, j, Sinv, cholSini, ningroup);
+            trgroup += 2.0 * Sij * Hinv[idx+j][idx+i];  //Sinv[i][j] * Hinv[j][i]
+            th2group += 2.0 * thopt[idx + i -1] * thopt[idx + j -1] * Sij;
+          }
+        }
+         
+        th2group= th2group / phi;
+         
+        ans += log( (trgroup + th2group)/(ningroup +.0) );
+      }
+
+    } //end for each group
+
+  return ans;
+
+}
+
+
+
+
 //********************************************************************************************
 // PRIORS ON MODEL SPACE (always return on log scale)
 //********************************************************************************************
@@ -1828,15 +1967,53 @@ double unifPrior(int *sel, int *nsel, struct marginalPars *pars) { return -((*(*
 double unifPriorTP(int *sel, int *nsel, struct marginalPars *pars) { return -((*(*pars).ngroups) +2.0) * log(2.0); }
 double unifPrior_modavg(int *sel, int *nsel, struct modavgPars *pars) { return 0.0; }
 
+double vectBinom(int *sel, int *nsel, int len_prDeltap, int len_prConstrp, struct marginalPars *pars) {
+  int i, sel_i=0, delta_i=0, constr_i=0, ngroups=*(*pars).ngroups, *groups=(*pars).groups, *nconstraints=(*pars).nconstraints, *nvaringroup=(*pars).nvaringroup;
+  double ans=0, *prDeltap=(*pars).prDeltap, *prConstrp=(*pars).prConstrp;
+
+  if (*nsel == 0) {
+    for (i=0; i<len_prDeltap; i++) ans += log(1-prDeltap[(len_prDeltap > 1) ? i : 0]);
+    if (*(*pars).ngroupsconstr > 0) {
+      for (i=0; i<len_prConstrp; i++) ans += log(1-prConstrp[(len_prConstrp > 1) ? i : 0]);
+    }
+  } else {
+    for (i = 0; i<ngroups; i++) {
+      if (nconstraints[i] == 0) {
+        if (i == groups[sel[sel_i]]) {
+          ans += log(prDeltap[delta_i]);
+          if (sel_i < *nsel-1) sel_i += nvaringroup[groups[i]];
+        } else {
+          ans += log(1 - prDeltap[delta_i]);
+        }
+        if (len_prDeltap > 1) delta_i++;
+      } else { // constrained, use prConstrp
+        if (i == groups[sel[sel_i]]) {
+          ans += log(prConstrp[constr_i]);
+          if (sel_i < *nsel-1) sel_i += nvaringroup[groups[i]];
+        } else {
+          ans += log(1 - prConstrp[constr_i]);
+        }
+        if (len_prConstrp > 1) constr_i++;
+      }
+    }
+  }
+  return ans;
+}
+
 //nsel ~ Binom(p,prDeltap)
 double binomPrior(int *sel, int *nsel, struct marginalPars *pars) {
-  int ngroups0, ngroups1, n_notconstr;
-  double ans;
+  int ngroups0, ngroups1, n_notconstr, n_constr=*(*pars).ngroupsconstr,
+      len_prDeltap=(int) *(*pars).parprDeltap, len_prConstrp=(int) *(*pars).parprConstrp;
+  double ans, *prDeltap=(*pars).prDeltap, *prConstrp=(*pars).prConstrp;
   nselConstraints(&ngroups0, &ngroups1, sel, nsel, (*pars).groups, (*pars).nconstraints, (*pars).nvaringroup);
-  n_notconstr= *(*pars).ngroups - *(*pars).ngroupsconstr;
-  ans = dbinomial(ngroups0, n_notconstr, *(*pars).prDeltap, 1) - lnchoose((double) n_notconstr, (double) ngroups0);
-  if ((*(*pars).ngroupsconstr) >0) {
-    ans += dbinomial(ngroups1,*(*pars).ngroupsconstr,*(*pars).prConstrp,1) - lnchoose((double) (*(*pars).ngroupsconstr), (double) ngroups1);
+  n_notconstr= *(*pars).ngroups - n_constr;
+  if ((len_prDeltap == 1) & (len_prConstrp == 1)) {
+    ans= (ngroups0+.0)*log(*prDeltap) + (n_notconstr-ngroups0+.0)*log(1-*prDeltap);
+    if ((n_constr) > 0) {
+      ans += (ngroups1+.0)*log(*prConstrp) + (n_constr-ngroups1+.0)*log(1-*prConstrp);
+    }
+  } else {
+    ans = vectBinom(sel, nsel, len_prDeltap, len_prConstrp, pars);
   }
   return ans;
   //return dbinomial(*nsel,*(*pars).p,*(*pars).prDeltap,1);
@@ -2079,6 +2256,90 @@ void gzell_Sinv(double *Sinv, double *cholSinv, double *ldetSinv, int *ngroups, 
 }
 
 
+//Same as gzell_Sinv, adjusting the prior dispersion for pMOM and groupMOM
+//
+//  priorcode (options currently implemented here)
+//     0: pMOM on all coef
+//     5: group pMOM (same as pMOM, standardized by n / X'X)
+//     9: group Zellner on all coef
+//    10: pMOM + group pMOM
+//    13: pMOM + group Zellner
+//    43: group Zellner + group Zellner
+//    50: group pMOM + group pMOM
+//    53: group pMOM + group Zellner
+//    63: group Zellner + group Zellner
+void gzell_Sinv_byprior(double *Sinv, double *cholSinv, double *ldetSinv, int *ngroups, double *nvaringroups, int *sel, double *cholSini, crossprodmat *XtX, int *n, double *tau, double *taugroup, int *priorcode) {
+  bool posdef, idcov, groupmom, groupzell;
+  int i, j, l, k, firstingroup, groupsize, idxini, Sidxini;
+  double ct, sqrtct, ct1, tauinv, sqrttauinv, neglogtau;
+
+  idcov= ((*priorcode==0) || (*priorcode == 10) || (*priorcode == 13));  //is the covariance for individual coef tau * 1
+  groupmom= ((*priorcode== 10) || (*priorcode==50));                     //was a group MOM prior set on groups
+  groupzell= ((*priorcode==9) || (*priorcode==13) || (*priorcode== 43) || (*priorcode== 53) || (*priorcode==63)); //was a group Zellner set on groups
+
+  if (idcov)  {
+    tauinv= 1.0/(*tau);
+    sqrttauinv= sqrt(tauinv);
+    neglogtau= -log(*tau);
+  }
+
+  //Pre-compute scaling factor for individual parameters
+  if ((*priorcode==9) || (*priorcode==43) || (*priorcode==63)) ct1= 1.0 / (*tau);           //group Zellner on individual coef
+  if ((*priorcode==5) || (*priorcode==50) || (*priorcode==53)) ct1= 3.0 / ((*n) * (*tau));  //group pMOM on individual coef
+
+  //Iterate over groups
+  for (i=0, firstingroup=0; i< *ngroups; i++) {
+    groupsize= (int) (nvaringroups[i] + .1);
+    idxini= sel[firstingroup]; Sidxini= (int) (cholSini[i]+.1);
+
+    if ((groupsize==1) && idcov) {
+
+      cholSinv[Sidxini]= sqrttauinv;
+      Sinv[Sidxini]= tauinv;
+      ldetSinv[i] = neglogtau;
+
+    } else { 
+
+      XtX->choldc(idxini, idxini+groupsize-1, cholSinv + Sidxini, ldetSinv+i, &posdef);
+
+      if (groupsize==1) {
+        ct= ct1;
+      } else {
+        if (groupmom) { //group MOM
+          ct= (nvaringroups[i] + 2.0) / ((*n) * (*taugroup));
+        } else if (groupzell) { //group Zellner
+          ct= nvaringroups[i] / (*taugroup);
+        } else {
+          Rf_error("prior not implemented in gzell_Sinv\n");
+        }
+      }
+      sqrtct= sqrt(ct);
+
+      for (j=0, l=0, k=0; j< groupsize*(groupsize+1)/2; j++) {
+        (*(cholSinv + Sidxini + j)) *= sqrtct;
+        Sinv[Sidxini + j]= ct * XtX->at(sel[firstingroup+l],sel[firstingroup+k]);
+        if (l< groupsize-1) { l++; } else { k++; l=k; }
+      }
+      ldetSinv[i] = log(ldetSinv[i]) + 2.0 * nvaringroups[i] * log(sqrtct);
+
+    }
+
+    firstingroup += groupsize;
+  }
+}
+
+/* Return element (k,l) in Sinv of groupid, as stored by gzell_Sinv_byprior */
+double getelem_Sinv(int groupid, int k, int l, double *Sinv, double *cholSini, int ningroup) {
+  int k0, l0, kk, idxini;
+
+  idxini= (int) (cholSini[groupid]+.1);
+
+  if (l >= k) { k0= k-1; l0= l-1; } else { k0= l-1; l0= k-1; } //ensure that l>=k
+
+  kk= idxini + k0*ningroup - k0*(k0-1)/2;
+  return *(Sinv + kk + l0-k0);  //elem (k,l) in Sinv of groupid, works for l>=k
+
+}
 
 /*Return indexes at which the Cholesky decomposition starts for each group when storing the lower-triangular Cholesky decomp as vectors
   Input
@@ -2101,6 +2362,528 @@ void cholSini_indexes(double *cholSini, int *cholSsize, int ngroups, double *nva
     (*cholSsize) += nelem;
     if (i< ngroups-1) cholSini[i+1]= cholSini[i] + nelem;
   }
+}
+
+
+
+
+//*************************************************************************************
+// PRIORS, GRADIENTS AND HESSIANS IN STANDARDIZED FORMAT
+//*************************************************************************************
+
+
+//Evaluate negative log-likelihood + log-prior (pMOM + group Zellner) and initialize funargs
+void pmomgzell_log (double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  dmomgzell(f, th, (*pars).tau, (*funargs)["nvarinselgroups"], (*funargs)["nselgroups"], (*funargs)["ldetSinv"], (*funargs)["cholSinv"], (*funargs)["cholSini"], true);
+  (*f) = -(*f);
+
+}
+
+//Gradient wrt th[j] of log pMOM + group Zellner prior
+void pmomgzell_grad (double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau);
+      (*priorgrad)= -2.0/th[j] + th[j]/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    }
+
+}
+
+//Gradient and hessian wrt th[j] of negative log pMOM + group Zellner prior
+void pmomgzell_gradhess (double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau);;
+      (*priorgrad)= -2.0/th[j] + th[j]/tau;
+      (*priorhess)= 2.0/(th[j]*th[j]) + 1.0/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      (*priorhess)= Sinv[jj];
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    }
+
+}
+
+
+void pmomgzell_hess (double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  /* NEGATIVE HESSIAN FOR pMOM - GROUP ZELLNER PRIOR IS ADDED TO hess
+
+     Input/Output
+
+     - hess: the input value is modified by adding the negative hessian. For example, if on input hess contains the negative hessian of the log-likelihood, then on output hess contains the negative hessian of the log-joint (log-likelihood + log prior)
+
+*/
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    pmomgzell_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] += priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
+}
+
+
+//Evaluate negative log-likelihood + log-prior (peMOM + group Zellner) and initialize funargs
+void pemomgzell_log(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  demomgzell(f, th, (*pars).tau, (*funargs)["nvarinselgroups"], (*funargs)["nselgroups"], (*funargs)["ldetSinv"], (*funargs)["cholSinv"], (*funargs)["cholSini"], true);
+  (*f)= -(*f);
+
+}
+
+void pemomgzell_gradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+/* NEGATIVE GRADIENT AND HESSIAN WRT th[j] OF THE peMOM - GROUP ZELLNER PRIOR */
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau), th2= th[j]*th[j];
+      (*priorgrad)= -2.0 * tau/(th2 * th[j]) + th[j]/tau;
+      (*priorhess)= 6.0*tau/(th2*th2) + 1.0/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      (*priorhess)= Sinv[jj];
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    }
+
+}
+
+void pemomgzell_grad(double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+/* NEGATIVE GRADIENT WRT th[j] OF THE peMOM - GROUP ZELLNER PRIOR */
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau), th2= th[j]*th[j];
+      (*priorgrad)= -2.0 * tau/(th2 * th[j]) + th[j]/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    }
+
+}
+
+void pemomgzell_hess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  /* NEGATIVE HESSIAN FOR peMOM - GROUP ZELLNER PRIOR IS ADDED TO hess
+
+     Input/Output
+
+     - hess: the input value is modified by adding the negative hessian. For example, if on input hess contains the negative hessian of the log-likelihood, then on output hess contains the negative hessian of the log-joint (log-likelihood + log prior)
+
+*/
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    pemomgzell_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] += priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
+}
+
+
+
+
+//Evaluate negative log-likelihood + log-prior (group Zellner + group Zellner) and initialize funargs
+void gzellgzell_log(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  dgzellgzell(f, th, (*funargs)["nvarinselgroups"], (*funargs)["nselgroups"], (*funargs)["ldetSinv"], (*funargs)["cholSinv"], (*funargs)["cholSini"], true);
+  (*f)= -(*f);
+
+}
+
+void gzellgzell_gradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+/* NEGATIVE GRADIENT AND HESSIAN WRT th[j] OF THE GROUP ZELLNER - GROUP ZELLNER PRIOR */
+
+    int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+    double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+    ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+    firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+    idxini= (int) (cholSini[groupid] +.1);
+    jingroup= j - firstingroup;
+    jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+    (*priorhess)= Sinv[jj];
+    for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+    for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+
+}
+
+void gzellgzell_grad(double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+/* NEGATIVE GRADIENT WRT th[j] OF THE GROUP ZELLNER - GROUP ZELLNER PRIOR */
+    int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+    double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+    ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+    firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+    idxini= (int) (cholSini[groupid] +.1);
+    jingroup= j - firstingroup;
+    jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+    for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+    for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+
+}
+
+void gzellgzell_hess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  /* NEGATIVE HESSIAN FOR GROUP ZELLNER - GROUP ZELLNER PRIOR IS ADDED TO hess
+
+     Input/Output
+
+     - hess: the input value is modified by adding the negative hessian. For example, if on input hess contains the negative hessian of the log-likelihood, then on output hess contains the negative hessian of the log-joint (log-likelihood + log prior)
+
+*/
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    gzellgzell_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] += priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
+}
+
+
+
+//Evaluate negative log-likelihood + log-prior (pMOM + group Zellner + inverse gamma) and initialize funargs
+void pmomgzellig_log (double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  pmomgzell_log(f, th, sel, thlength, pars, funargs);
+  (*f) -= dinvgammaC(exp(-2.0*th[*thlength -1]), *((*pars).alpha)/2.0, *((*pars).lambda)/2.0, 1) + log(2.0) - 2.0*th[*thlength -1];
+
+}
+
+//Gradient and hessian wrt th[j] of log pMOM + group Zellner prior
+void pmomgzellig_gradhess (double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau);
+      (*priorgrad)= 2.0/th[j] - th[j]/tau;
+      (*priorhess)= -2.0/(th[j]*th[j]) - 1.0/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      (*priorhess)= - Sinv[jj];
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+      (*priorgrad) = -(*priorgrad);
+    }
+
+  } else { //if exp(th[j]) is the residual precision
+    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
+  }
+}
+
+
+//Gradient wrt th[j] of log pMOM + group Zellner prior
+void pmomgzellig_grad (double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau);
+      (*priorgrad)= 2.0/th[j] - th[j]/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+      (*priorgrad) = -(*priorgrad);
+    }
+
+  } else { //if exp(th[j]) is the residual precision
+    double priorhess= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * priorhess + (*((*pars).alpha));
+  }
+}
+
+
+void pmomgzellig_hess (double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    pmomgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] -= priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
+}
+
+
+//Evaluate negative log-likelihood + log-prior (peMOM + group Zellner + inverse gamma) and initialize funargs
+void pemomgzellig_log(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  pemomgzell_log(f, th, sel, thlength, pars, funargs);
+  (*f) -= dinvgammaC(exp(-2.0*th[*thlength -1]), *((*pars).alpha)/2.0, *((*pars).lambda)/2.0, 1) + log(2.0) - 2.0*th[*thlength -1];
+
+}
+
+void pemomgzellig_gradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau), th2= th[j]*th[j];
+      (*priorgrad)= 2.0 * tau/(th2 * th[j]) - th[j]/tau;
+      (*priorhess)= -6.0*tau/(th2*th2) - 1.0/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      (*priorhess)= - Sinv[jj];
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+      (*priorgrad) = -(*priorgrad);
+    }
+
+  } else { //if exp(th[j]) is the residual precision
+    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
+  }
+}
+
+void pemomgzellig_grad(double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    if (((*pars).isgroup)[sel[j]] == 0) {
+      double tau= *((*pars).tau), th2= th[j]*th[j];
+      (*priorgrad)= 2.0 * tau/(th2 * th[j]) - th[j]/tau;
+    } else {
+      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+      idxini= (int) (cholSini[groupid] +.1);
+      jingroup= j - firstingroup;
+      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+      (*priorgrad) = -(*priorgrad);
+    }
+
+  } else { //if exp(th[j]) is the residual precision
+    double priorhess= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * priorhess + (*((*pars).alpha));
+  }
+}
+
+
+void pemomgzellig_hess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    pemomgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] -= priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
+}
+
+
+
+//Evaluate negative log-likelihood + log-prior (group Zellner + group Zellner + inverse gamma) and initialize funargs
+void gzellgzellig_log(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+
+  gzellgzell_log(f, th, sel, thlength, pars, funargs);
+  (*f) -= dinvgammaC(exp(-2.0*th[*thlength -1]), *((*pars).alpha)/2.0, *((*pars).lambda)/2.0, 1) + log(2.0) - 2.0*th[*thlength -1];
+
+}
+
+void gzellgzellig_gradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+    double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+    ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+    firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+    idxini= (int) (cholSini[groupid] +.1);
+    jingroup= j - firstingroup;
+    jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+    (*priorhess)= - Sinv[jj];
+    for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+    for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    (*priorgrad) = -(*priorgrad);
+
+  } else { //if exp(th[j]) is the residual precision
+    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
+  }
+}
+
+
+void gzellgzellig_grad(double *priorgrad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+
+  if (j < *thlength -1) { //if th[j] is a regression coefficient
+
+    int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
+    double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
+    ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
+    firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
+    idxini= (int) (cholSini[groupid] +.1);
+    jingroup= j - firstingroup;
+    jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
+    for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
+    for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
+    (*priorgrad) = -(*priorgrad);
+
+  } else { //if exp(th[j]) is the residual precision
+    double priorhess= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
+    (*priorgrad)= 0.5 * priorhess + (*((*pars).alpha));
+  }
+}
+
+
+void gzellgzellig_hess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  /* HESSIAN FOR AFT LOG-LIKELIHOOD Xobs + LOG-LIKELIHOOD Xcens evaluated at any th   */
+  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+
+  for (j=0; j< *thlength; j++) {
+    gzellgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
+    hess[j+1][j+1] -= priorhess;
+  }
+  //Add group Zellner's prior contribution to off-diagonal hessian elements
+  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  firstingroup=0;
+  for (j=0; j< ngroups; j++) {
+    ningroup= (int) (nvaringroup[j] +.1);
+    if (ningroup>1) {
+      idxini= (int) (cholSini[j]+.1);
+      for (k=0; k< ningroup; k++) {
+        kk= idxini + k*ningroup - k*(k-1)/2;
+        for (l=k+1; l< ningroup; l++) {
+          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+        }
+      }
+    }
+    firstingroup += ningroup;
+  }
+
 }
 
 
@@ -2158,14 +2941,194 @@ void leastsquares(double *theta, double *phi, double *ypred, double *y, double *
 // MARGINAL LIKELIHOOD UNDER NORMAL ERRORS
 //*************************************************************************************
 
-// pMOM on individual coef, group MOM on groups
-double pmomgmomMarg(int *sel, int *nsel, struct marginalPars *pars) {
-  Rf_error("pMOM + group MOM not currently implemented for linear regression");
+// pMOM on individual coef, group Zellner on groups
+double pmomgzellMarg(int *sel, int *nsel, struct marginalPars *pars) {
+  int i_var, i, j_var, j, p_i, varcount, groupcount, *groupsel, singlevarcount=0, *isgroup=pars->isgroup, nu;
+  double num, den, ans=0.0, aux, term1, *m, **S, **Sinv, **Vinv, **Vinv_chol, detS, detVinvtau, logdetVinv, tau= *(*pars).tau, tauinv=1/tau, taugroup=*(*pars).taugroup, taugroupinv=1/taugroup, logtaus, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss, zero=0, *nvarinselgroups, *firstingroup, nselgroups, *selgroups;
+  covariancemat *V0inv=(*pars).V0inv;
+  bool posdef;
+  if (*nsel ==0) {
+
+    term1= .5*(*(*pars).n + *(*pars).alpha);
+    num= .5*(*(*pars).alpha)*log(*(*pars).lambda) + gamln(&term1);
+    den= .5*(*(*pars).n)*(LOG_M_PI) + gamln(&alphahalf);
+    ans= num -den - term1*log(*(*pars).lambda + *(*pars).sumy2);
+
+  } else {
+
+    nvarinselgroups= dvector(0, min_xy(*nsel, *((*pars).ngroups))); firstingroup= dvector(0, min_xy(*nsel, *((*pars).ngroups))); selgroups= dvector(0, *nsel -1);
+    findselgroups(nvarinselgroups, firstingroup, &nselgroups, selgroups, sel, nsel, (*pars).nvaringroup, (*pars).ngroups); //copy subset of nvaringroup into nvarinselgroups
+    m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
+    Vinv = dmatrix(1, *nsel, 1, *nsel); Vinv_chol = dmatrix(1, *nsel, 1, *nsel);
+    addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
+    for (i=1; i<=*nsel; i++) {
+      for (j=i; j<=*nsel; j++) {
+        Vinv[i][j] = 0;
+      }
+    }
+    for (varcount=1, groupcount=0; varcount <= *nsel; groupcount++) {
+      p_i = (int) nvarinselgroups[groupcount];
+      if (p_i==1) {
+        Vinv[varcount][varcount] = tauinv;
+        S[varcount][varcount]+=tauinv;
+        varcount++;
+        singlevarcount++;
+      } else {
+        groupsel = ivector(0,p_i);
+        for (i=0; i<p_i; i++) {  groupsel[i] = sel[varcount-1+i]; }
+        for (i_var=varcount, i=0; i<p_i; i_var++, i++) {
+          for (j_var=i_var, j=i; j<p_i; j_var++, j++) {
+            if (V0inv->computed_at(groupsel[i], groupsel[j])) {
+              Vinv[i_var][j_var]= V0inv->at(groupsel[i], groupsel[j]);
+              S[i_var][j_var]+=Vinv[i_var][j_var];
+            } else {
+              aux = (*pars).XtX->at(groupsel[i], groupsel[j])*taugroupinv*p_i;
+              V0inv->set(groupsel[i], groupsel[j], aux);
+              Vinv[i_var][j_var]= aux;
+              S[i_var][j_var]+=aux;
+            }
+          }
+        }
+        varcount = varcount + p_i;
+        free_ivector(groupsel,0,p_i);
+      }
+    }
+    choldc(Vinv, *nsel, Vinv_chol, &posdef);
+    detVinvtau = choldc_det(Vinv_chol, *nsel);
+    logtaus = singlevarcount*log(tau) + (*nsel - singlevarcount) * log(taugroup);
+    logdetVinv = log(detVinvtau) + logtaus;
+    invdet_posdef(S,*nsel,Sinv,&detS);
+    Asym_xsel(Sinv,*nsel,(*pars).ytX,sel,m);
+    /* nuhalf= .5*(*(*pars).n + *(*pars).alpha); */
+    nuhalf= (*(*pars).r)*singlevarcount + .5*(*(*pars).n + *(*pars).alpha);
+    nu= (int) (2.0*nuhalf);
+
+    ss= *(*pars).lambda + *(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel);
+    num= gamln(&nuhalf) + alphahalf*log(lambdahalf) + nuhalf*(log(2.0) - log(ss));
+    den= .5*(*(*pars).n * LOG_M_2PI + log(detS) - logdetVinv) + .5 * logtaus + gamln(&alphahalf);
+    ans= num - den;
+
+    // Orthogonal approx
+    term1= ss / ((double) (nu-2));
+    for (i=1; i<=(*nsel); i++) {
+      if (isgroup[sel[i-1]] == 0) {
+        ans+= log(pow(m[i],2.0) + Sinv[i][i] * term1);
+      }
+    }
+
+    free_dvector(m,1,*nsel); free_dmatrix(S,1,*nsel,1,*nsel); free_dmatrix(Sinv,1,*nsel,1,*nsel);
+    free_dmatrix(Vinv,1,*nsel,1,*nsel); free_dmatrix(Vinv_chol,1,*nsel,1,*nsel);
+
+  }
+  if (*(*pars).logscale !=1) { ans= exp(ans); }
+  return ans;
 }
 
-// pMOM on individual coef, block Zellner on groups
-double pmomgzellMarg(int *sel, int *nsel, struct marginalPars *pars) {
-  Rf_error("pMOM + block Zellner not currently implemented for linear regression");
+// pMOM on individual coef, groups MOM on groups
+double pmomgmomMarg(int *sel, int *nsel, struct marginalPars *pars) {
+  int i_var, i, j_var, j, p_i, nu, varcount, groupcount, *groupsel, singlevarcount=0, n=*(*pars).n;
+  double num, den, ans=0.0, aux, trSV, term1, *m, *mj, **S, **Sinv, **Vinv, **Vinv_chol, **Vinvj,
+         detS, detVinvtau, logdetVinv, tau= *(*pars).tau, tauinv=1/tau, taugroup=*(*pars).taugroup*((double) n),
+         taugroupinv=1/taugroup, logtaus, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda),
+         ss, zero=0, *nvarinselgroups, *firstingroup, nselgroups, *selgroups;
+  covariancemat *V0inv=(*pars).V0inv;
+  bool posdef;
+  if (*nsel ==0) {
+
+    term1= .5*(*(*pars).n + *(*pars).alpha);
+    num= .5*(*(*pars).alpha)*log(*(*pars).lambda) + gamln(&term1);
+    den= .5*(*(*pars).n)*(LOG_M_PI) + gamln(&alphahalf);
+    ans= num -den - term1*log(*(*pars).lambda + *(*pars).sumy2);
+
+  } else {
+
+    nvarinselgroups= dvector(0, min_xy(*nsel, *((*pars).ngroups))); firstingroup= dvector(0, min_xy(*nsel, *((*pars).ngroups))); selgroups= dvector(0, *nsel -1);
+    findselgroups(nvarinselgroups, firstingroup, &nselgroups, selgroups, sel, nsel, (*pars).nvaringroup, (*pars).ngroups); //copy subset of nvaringroup into nvarinselgroups
+    free_dvector(firstingroup, 0, min_xy(*nsel, *((*pars).ngroups)));
+    free_dvector(selgroups, 0, *nsel -1);
+    m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
+    Vinv = dmatrix(1, *nsel, 1, *nsel); Vinv_chol = dmatrix(1, *nsel, 1, *nsel);
+    addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
+    for (i=1; i<=*nsel; i++) {
+      for (j=i; j<=*nsel; j++) {
+        Vinv[i][j] = 0;
+      }
+    }
+    for (varcount=1, groupcount=0; varcount <= *nsel; groupcount++) {
+      p_i = (int) nvarinselgroups[groupcount];
+      if (p_i==1) {
+        Vinv[varcount][varcount] = tauinv;
+        S[varcount][varcount]+= tauinv;
+        varcount++;
+        singlevarcount++;
+      } else {
+        groupsel = ivector(0,p_i-1);
+        for (i=0; i<p_i; i++) {  groupsel[i] = sel[varcount-1+i]; }
+        for (i_var=varcount, i=0; i<p_i; i_var++, i++) {
+          for (j_var=i_var, j=i; j<p_i; j_var++, j++) {
+            if (V0inv->computed_at(groupsel[i], groupsel[j])) {
+              Vinv[i_var][j_var]= V0inv->at(groupsel[i], groupsel[j]);
+              S[i_var][j_var]+=Vinv[i_var][j_var];
+            } else {
+              aux = (*pars).XtX->at(groupsel[i], groupsel[j])*taugroupinv*(p_i+2);
+              V0inv->set(groupsel[i], groupsel[j], aux);
+              Vinv[i_var][j_var]= aux;
+              S[i_var][j_var]+=aux;
+            }
+          }
+        }
+        varcount = varcount + p_i;
+        free_ivector(groupsel,0,p_i-1);
+      }
+    }
+    choldc(Vinv, *nsel, Vinv_chol, &posdef);
+    detVinvtau = choldc_det(Vinv_chol, *nsel);
+    logtaus = singlevarcount*log(tau) + (*nsel - singlevarcount) * log(taugroup);
+    logdetVinv = log(detVinvtau) + logtaus;
+    invdet_posdef(S,*nsel,Sinv,&detS);
+    Asym_xsel(Sinv,*nsel,(*pars).ytX,sel,m);
+    /* nuhalf= .5*(*(*pars).n + *(*pars).alpha); */
+    nuhalf= (*(*pars).r)*singlevarcount + .5*(*(*pars).n + *(*pars).alpha);
+    nu= (int) (2.0*nuhalf);
+
+    ss= *(*pars).lambda + *(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel);
+    num= gamln(&nuhalf) + alphahalf*log(lambdahalf) + nuhalf*(log(2.0) - log(ss));
+    den= .5*(*(*pars).n * LOG_M_2PI + log(detS) - logdetVinv) + .5 * logtaus + gamln(&alphahalf);
+    ans= num - den;
+
+    // Orthogonal approx
+    term1= ss / ((double) (nu-2));
+    for (varcount=1, groupcount=0; varcount <= *nsel; groupcount++) {
+      p_i = (int) nvarinselgroups[groupcount];
+      if (p_i==1) {
+        ans += log(pow(m[varcount],2.0) + Sinv[varcount][varcount] * term1);
+        varcount++;
+      } else {
+        trSV = 0;
+        Vinvj = dmatrix(1, p_i, 1, p_i);
+        mj = dvector(1, p_i);
+        for (i=1, i_var=varcount; i<=p_i; i++, i_var++) {
+          Vinvj[i][i] = Vinv[i_var][i_var] / p_i;
+          trSV += Vinvj[i][i] * Sinv[i_var][i_var];
+          mj[i] = m[i_var];
+          for (j=i+1, j_var=i_var+1; j<=p_i; j++, j_var++) {
+            Vinvj[i][j] = Vinv[i_var][j_var] / p_i;
+            trSV += 2 * Vinvj[i][j] * Sinv[i_var][j_var];
+          }
+        }
+        aux = quadratic_xtAx(mj, Vinvj, 1, p_i);
+        ans += log(trSV + aux / term1);
+        varcount = varcount + p_i;
+        free_dmatrix(Vinvj,1,p_i,1,p_i);
+        free_dvector(mj,1,p_i);
+      }
+    }
+    free_dvector(m,1,*nsel); free_dmatrix(S,1,*nsel,1,*nsel); free_dmatrix(Sinv,1,*nsel,1,*nsel);
+    free_dmatrix(Vinv,1,*nsel,1,*nsel); free_dmatrix(Vinv_chol,1,*nsel,1,*nsel);
+    free_dvector(nvarinselgroups, 0, min_xy(*nsel, *((*pars).ngroups)));
+  }
+  if (*(*pars).logscale !=1) { ans= exp(ans); }
+  return ans;
 }
 
 // peMOM on individual coef, group eMOM on groups
@@ -2196,6 +3159,7 @@ double zellgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
 
     nvarinselgroups= dvector(0, min_xy(*nsel, *((*pars).ngroups))); firstingroup= dvector(0, min_xy(*nsel, *((*pars).ngroups))); selgroups= dvector(0, *nsel -1);
     findselgroups(nvarinselgroups, firstingroup, &nselgroups, selgroups, sel, nsel, (*pars).nvaringroup, (*pars).ngroups); //copy subset of nvaringroup into nvarinselgroups
+    free_dvector(selgroups, 0, *nsel -1);
     m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
     Vinv = dmatrix(1, *nsel, 1, *nsel); Vinv_chol = dmatrix(1, *nsel, 1, *nsel);
     addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
@@ -2232,7 +3196,7 @@ double zellgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
               Vinv[i_var][j_var]= V0inv->at(groupsel[i], groupsel[j]);
               S[i_var][j_var]+=Vinv[i_var][j_var];
             } else {
-              aux = (*pars).XtX->at(groupsel[i], groupsel[j])/taugroup;
+              aux = (*pars).XtX->at(groupsel[i], groupsel[j])/taugroup*p_i;
               V0inv->set(groupsel[i], groupsel[j], aux);
               Vinv[i_var][j_var]= aux;
               S[i_var][j_var]+=aux;
@@ -2258,6 +3222,8 @@ double zellgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
 
     free_dvector(m,1,*nsel); free_dmatrix(S,1,*nsel,1,*nsel); free_dmatrix(Sinv,1,*nsel,1,*nsel);
     free_dmatrix(Vinv,1,*nsel,1,*nsel); free_dmatrix(Vinv_chol,1,*nsel,1,*nsel);
+    free_dvector(nvarinselgroups, 0, min_xy(*nsel, *((*pars).ngroups)));
+    free_dvector(firstingroup, 0, min_xy(*nsel, *((*pars).ngroups)));
 
   }
   if (*(*pars).logscale !=1) { ans= exp(ans); }
@@ -2267,7 +3233,7 @@ double zellgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
 // Zellner on individual coef, normalid on groups
 double normidgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
   int i_var, i, j_var, j, p_i, varcount, groupcount, *groupsel, singlevarcount=0;
-  double num, den, ans=0.0, aux, term1, *m, **S, **Sinv, **Vinv, **Vinv_chol, detS, detVinvtau, logdetVinv, tau= *(*pars).tau, taugroup=*(*pars).taugroup, logtaus, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss, zero=0, *nvarinselgroups, *firstingroup, nselgroups, *selgroups;
+  double num, den, ans=0.0, aux, term1, *m, **S, **Sinv, **Vinv, **Vinv_chol, detS, detVinvtau, logdetVinv, tau= *(*pars).tau, tauinv=1/tau, taugroup=*(*pars).taugroup, taugroupinv=1/taugroup, logtaus, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss, zero=0, *nvarinselgroups, *firstingroup, nselgroups, *selgroups;
   covariancemat *V0inv=(*pars).V0inv;
   bool posdef;
   if (*nsel ==0) {
@@ -2281,6 +3247,8 @@ double normidgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
 
     nvarinselgroups= dvector(0, min_xy(*nsel, *((*pars).ngroups))); firstingroup= dvector(0, min_xy(*nsel, *((*pars).ngroups))); selgroups= dvector(0, *nsel -1);
     findselgroups(nvarinselgroups, firstingroup, &nselgroups, selgroups, sel, nsel, (*pars).nvaringroup, (*pars).ngroups); //copy subset of nvaringroup into nvarinselgroups
+    free_dvector(firstingroup, 0, min_xy(*nsel, *((*pars).ngroups)));
+    free_dvector(selgroups, 0, *nsel -1);
     m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
     Vinv = dmatrix(1, *nsel, 1, *nsel); Vinv_chol = dmatrix(1, *nsel, 1, *nsel);
     addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
@@ -2292,8 +3260,8 @@ double normidgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
     for (varcount=1, groupcount=0; varcount <= *nsel; groupcount++) {
       p_i = (int) nvarinselgroups[groupcount];
       if (p_i==1) {
-        Vinv[varcount][varcount] = 1/tau;
-        S[varcount][varcount]+=Vinv[varcount][varcount];
+        Vinv[varcount][varcount] = tauinv;
+        S[varcount][varcount]+=tauinv;
         varcount++;
         singlevarcount++;
       } else {
@@ -2305,7 +3273,7 @@ double normidgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
               Vinv[i_var][j_var]= V0inv->at(groupsel[i], groupsel[j]);
               S[i_var][j_var]+=Vinv[i_var][j_var];
             } else {
-              aux = (*pars).XtX->at(groupsel[i], groupsel[j])/taugroup;
+              aux = (*pars).XtX->at(groupsel[i], groupsel[j])*taugroupinv*p_i;
               V0inv->set(groupsel[i], groupsel[j], aux);
               Vinv[i_var][j_var]= aux;
               S[i_var][j_var]+=aux;
@@ -2331,6 +3299,7 @@ double normidgzellMarg (int *sel, int *nsel, struct marginalPars *pars) {
 
     free_dvector(m,1,*nsel); free_dmatrix(S,1,*nsel,1,*nsel); free_dmatrix(Sinv,1,*nsel,1,*nsel);
     free_dmatrix(Vinv,1,*nsel,1,*nsel); free_dmatrix(Vinv_chol,1,*nsel,1,*nsel);
+    free_dvector(nvarinselgroups, 0, min_xy(*nsel, *((*pars).ngroups)));
 
   }
   if (*(*pars).logscale !=1) { ans= exp(ans); }
@@ -2531,6 +3500,32 @@ void anegloglnormalAFT(double *f, double *th, int *sel, int *thlength, struct ma
 
 }
 
+//Same as anegloglnormalAFT, but assumes that regression coefficients th[0,...,*thlength-2]= 0
+//NOTE: error log-variance rho not assumed to be zero, th[*thlength -1] is taken
+void anegloglnormalAFT0(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars,  std::map<string, double *> *funargs) {
+  int i, nuncens, n= *((*pars).n);
+  double rho= th[*thlength -1], exprho= exp(rho), *y= (*pars).y, sumres2, sumlogPhires, *res, *pnormres;
+
+  nuncens= (int) (*(*funargs)["nuncens"] +.1);
+  res= (*funargs)["residuals"];
+  pnormres= (*funargs)["pnormres"];
+  (*f)= 0.5 * (*(*funargs)["nuncens"]) * (LOG_M_2PI - 2.0 * rho);
+
+  //Uncensored observations
+  for (i=0, sumres2=0; i< nuncens; i++) { res[i]= exprho * y[i]; sumres2 += res[i]*res[i]; }
+
+  //Censored observations
+  for (i=nuncens, sumlogPhires=0; i< n; i++) { 
+     res[i]= exprho * y[i]; 
+     pnormres[i-nuncens]= apnorm(-res[i],false); 
+     sumlogPhires += log(pnormres[i-nuncens]); 
+  }
+
+  (*f)= (*f) + 0.5 * sumres2 - sumlogPhires;
+
+}
+
+
 //Fast approximation to Negative log-likelhood for AFT model with Normal errors (uses apnorm, ainvmillsnorm in cstat.cpp)
 void anegloglnormalAFTupdate(double *fnew, double *thjnew, int j, double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
 
@@ -2730,11 +3725,55 @@ double infopropAFT(double z) {
 }
 */
 
-// pMOM on individual coef, group MOM on groups
+
 double pmomgmomSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
-  Rf_error("pMOM + group MOM not currently implemented for the AFT Normal model");
+  /*Marginal likelihood under pMOM(tau) + group MOM(taugroup) prior
+
+    prod_j pMOM(beta_j; tau)  prod_j N(delta_j; 0, (taugroup/[ncol(S_j)+2]) n (S_j)^{-1})
+
+    where beta=(beta_1,...,beta_p) and delta=(delta_1,...,delta_q) are subsets of th
+    corresponding to coefficients for individual variables and grouped variables (respectively)
+
+    S_j is the submatrix of S indicated by sel[0], sel[1] etc.
+  */
+
+  //if (*(*pars).method ==2) {
+    return SurvMargALA(sel, nsel, pars, 10); //priorcode=10 is pMOM + group pMOM
+  //} else {
+  //  return SurvMarg(sel, nsel, pars, 10); //priorcode=10 is pMOM + group pMOM
+  //}
+
 }
 
+
+double gmomgmomSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
+  /*Marginal likelihood under pMOM(tau) + group MOM(taugroup) prior
+
+    prod_j pMOM(beta_j; (tau/3) n (S_j)^{-1})  prod_j gMOM(delta_j; 0, (taugroup/[ncol(S_j)+2]) n (S_j)^{-1})
+
+    S_j is the submatrix of S indicated by sel[0], sel[1] etc.
+  */
+
+  //if (*(*pars).method ==2) {
+    return SurvMargALA(sel, nsel, pars, 50); //priorcode=50 is group pMOM + group pMOM
+  //} else {
+  //  return SurvMarg(sel, nsel, pars, 50); //priorcode=50 is group pMOM + group pMOM
+  //}
+
+}
+
+
+double gmomgzellSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
+  /*Marginal likelihood under group pMOM(tau) + group Zellner(taugroup) prior
+
+    prod_j pMOM(beta_j; (tau/3) n (S_j)^{-1})  prod_j N(delta_j; 0, (taugroup/ncol(S_j)) n (S_j)^{-1})
+
+    S_j is the submatrix of S indicated by sel[0], sel[1] etc.
+  */
+
+    return SurvMargALA(sel, nsel, pars, 53); //priorcode=53 is group pMOM + group Zellner
+
+}
 
 
 double pmomgzellSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
@@ -2748,7 +3787,12 @@ double pmomgzellSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
     S_j is the submatrix of S indicated by sel[0], sel[1] etc.
   */
 
-  return SurvMarg(sel, nsel, pars, 13); //priorcode=13 is pMOM + block Zellner
+  if (*(*pars).method ==2) {
+    return SurvMargALA(sel, nsel, pars, 13); //priorcode=13 is pMOM + block Zellner
+  } else {
+    return SurvMarg(sel, nsel, pars, 13); //priorcode=13 is pMOM + block Zellner
+  }
+
 }
 
 
@@ -2776,17 +3820,138 @@ double pemomgzellSurvMarg(int *sel, int *nsel, struct marginalPars *pars) {
 // Zellner on individual coef, block Zellner on groups
 double gzellgzellSurvMarg (int *sel, int *nsel, struct marginalPars *pars) {
 
-  return SurvMarg(sel, nsel, pars, 43); //priorcode=43 is block Zellner + block Zellner
+  if (*(*pars).method ==2) {
+    return SurvMargALA(sel, nsel, pars, 43); //priorcode=43 is block Zellner + block Zellner
+  } else {
+    return SurvMarg(sel, nsel, pars, 43);
+  }
 
 }
 
 
-double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
-  /*Marginal likelihood under pMOM/peMOM + block Zellner(taugroup) prior
 
-    priorcode indicates what prior is used
+
+double SurvMargALA(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
+  /*Marginal likelihood for AFT survival model under pMOM/peMOM + block Zellner(taugroup) prior
+
+    priorcode indicates what prior is used. Currently implemented options
 
     10: pMOM + group MOM
+    13: pMOM + group Zellner
+    43: group Zellner + group Zellner
+    50: group pMOM + group pMOM
+    53: group pMOM + group Zellner
+   */
+
+  std::map<string, double *> funargs;
+  bool momsingle, momgroup;
+  int i, nselgroupsint, cholSsize, *uncens, thlength= *nsel +1;
+  double ans, nuncens, sumy2obs=0, *residuals, nselgroups, *nvarinselgroups, *firstingroup, *selgroups, *ldetSinv, *cholSini, *cholSinv, *Sinv, *thini, *thopt, fini, *y, *pnormres, *g, **H, **Hinv, **cholH, logdispersion, *delta;
+  modselFunction *msfun;
+
+  g= dvector(1,thlength); H= dmatrix(1,thlength,1,thlength); Hinv= dmatrix(1,thlength,1,thlength); cholH= dmatrix(1,thlength,1,thlength);
+  thopt= dvector(0, *nsel); thini= dvector(0, *nsel);     delta= dvector(1, thlength);
+  y= (*pars).y;
+
+  //Initialize static elements in funargs (not changed by msfun)
+  uncens= (*pars).uncens;
+  for (i=0; (i< *((*pars).n) && (uncens[i]==1)); i++) { sumy2obs+= y[i] * y[i]; }
+  nuncens= (double) i;
+  funargs["nuncens"]= &nuncens; //number of uncensored observations
+  funargs["sumy2obs"]= &sumy2obs; //sum of squares for uncensored observations, i.e. sum_{i: uncens[i]==1} y[i]^2
+
+  nvarinselgroups= dvector(0, min_xy(*nsel, *((*pars).ngroups))); firstingroup= dvector(0, min_xy(*nsel, *((*pars).ngroups))); selgroups= dvector(0, *nsel -1);
+  findselgroups(nvarinselgroups, firstingroup, &nselgroups, selgroups, sel, nsel, (*pars).nvaringroup, (*pars).ngroups); //copy subset of nvaringroup into nvarinselgroups
+  funargs["nvarinselgroups"]= nvarinselgroups;
+  funargs["firstingroup"]= firstingroup;
+  funargs["nselgroups"]= &nselgroups;
+  funargs["selgroups"]= selgroups;
+  nselgroupsint= (int) (nselgroups +.1);
+
+  //Obtain Cholesky decomp and determinant of prior scale covariances for each group
+  ldetSinv= dvector(0, nselgroupsint); cholSini= dvector(0, nselgroupsint);
+  cholSini_indexes(cholSini, &cholSsize, nselgroupsint, nvarinselgroups);
+  cholSinv= dvector(0, cholSsize); Sinv= dvector(0, cholSsize);
+
+  funargs["cholSini"]= cholSini; //cholSini[j] is the index in cholSinv at which Sinv_j starts
+  gzell_Sinv_byprior(Sinv, cholSinv, ldetSinv, &nselgroupsint, nvarinselgroups, sel, cholSini, (*pars).XtX, (*pars).n, (*pars).tau, (*pars).taugroup, &priorcode);
+  funargs["ldetSinv"]= ldetSinv; funargs["cholSinv"]= cholSinv; funargs["Sinv"]= Sinv;
+
+  //Initialize dynamic elements in funargs (changed by msfun)
+  residuals= dvector(0, *((*pars).n));
+  pnormres= dvector(0, *((*pars).n) - nuncens);
+  funargs["residuals"]= residuals;
+  funargs["pnormres"]= pnormres;
+
+  //Assign functions to evaluate log-posterior, update log-posterior, gradient and hessians
+  msfun= new modselFunction(sel, thlength, pars, NULL);
+
+  //ALA to integrated likelihood under the base Normal prior
+  msfun->funupdate= &fgzellgzellSurvupdate;  //objective function
+  msfun->gradhessUniv= &fgzellgzell_AFTgradhess; msfun->hess= &fgzellgzellhess_AFT; msfun->gradUniv= &fgzellgzell_AFTgrad; //derivatives
+  msfun->ftol= 0.001; msfun->thtol= 0.001;
+
+  //Initialize. If not previously computed, find the optimal value of log-error dispersion, given theta=0
+  for (i=0; i< thlength; i++) thini[i]= 0;
+
+  if (*((*pars).usethinit) == 2) {
+    //take previously-computed error log-variance parameter
+    thini[*nsel]= ((*pars).thinit)[*((*pars).p)];
+    //evaluate fini at regression coef th=0 and initialize funargs
+    msfun->fun= &fgzellgzellSurv0;
+    msfun->evalfun(&fini, thini, &funargs);
+    msfun->fun= &fgzellgzellSurv;
+  } else { 
+    logdispersion= 0;
+    //evaluate fini at regression coef th=0 and initialize funargs
+    msfun->fun= &fgzellgzellSurv0; 
+    msfun->evalfun(&fini, thini, &funargs); 
+    //optimize error log-variance parameter
+    msfun->fun= &fgzellgzellSurv;
+    msfun->Newtonuniv(&logdispersion, *nsel, &fini, thini, &funargs, 5); //fini returns f at optimal log dispersion
+    thini[*nsel]= ((*pars).thinit)[*((*pars).p)]= logdispersion;
+    (*((*pars).usethinit))= 2;
+  } 
+
+  ans= msfun->ALA(thini, &fini, g, H, cholH, Hinv, true, true, 1.0, &funargs); //aprox marginal likelihood and return g, H, cholH and Hinv
+
+  //If needed, add term corresponding to the non-local prior penalty
+  momsingle= ((priorcode==10) || (priorcode==13) || (priorcode==50) || (priorcode==53)); //pMOM or groupMOM on single coef was set
+  momgroup= ((priorcode==10) || (priorcode)==50); //groupMOM on groups of coef was set
+
+ 
+  if (momsingle || momgroup) {
+
+    //Compute thopt= thini - Hinv g
+    Ax(Hinv,g,delta,1,thlength,1,thlength); 
+    for (i=0; i<= *nsel; i++) thopt[i]= thini[i] - delta[i+1];
+
+    gmompenalty_approx(momsingle, momgroup, thopt, Hinv, Sinv, exp(thopt[*sel]), thlength, *nsel, nselgroupsint, nvarinselgroups, firstingroup, cholSini);
+
+  }
+
+  //Free memory
+  free_dvector(g,1,thlength); free_dmatrix(H,1,thlength,1,thlength); free_dmatrix(Hinv,1,thlength,1,thlength); free_dmatrix(cholH, 1,thlength,1,thlength);
+  free_dvector(thopt, 0, *nsel); free_dvector(thini, 0, *nsel); free_dvector(delta, 1, thlength);
+  free_dvector(residuals, 0, *((*pars).n));
+  free_dvector(pnormres, 0, *((*pars).n) - nuncens);
+  free_dvector(nvarinselgroups, 0, min_xy(*nsel, *((*pars).ngroups)));
+  free_dvector(firstingroup, 0, min_xy(*nsel, *((*pars).ngroups)));
+  free_dvector(selgroups, 0, *nsel -1);
+  free_dvector(ldetSinv, 0, nselgroupsint); free_dvector(cholSini, 0, nselgroupsint); free_dvector(cholSinv, 0, cholSsize); free_dvector(Sinv, 0, cholSsize);
+  delete msfun;
+
+  return ans;
+}
+
+
+
+
+double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
+  /*Marginal likelihood for AFT survival model under pMOM/peMOM + block Zellner(taugroup) prior
+
+    priorcode indicates what prior is used. Currently implemented options
+
     13: pMOM + group Zellner
     32: peMOM + group eMOM
     33: peMOM + group Zellner
@@ -2794,7 +3959,7 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
    */
 
   std::map<string, double *> funargs;
-  bool posdef, orthoapprox;
+  bool posdef, orthoapprox=false;
   int i, nselgroupsint, cholSsize, *uncens, thlength= *nsel +1;
   double ans, nuncens, sumy2obs=0, *residuals, nselgroups, *nvarinselgroups, *firstingroup, *selgroups, *ldetSinv, *cholSini, *cholSinv, *Sinv, *thini, *thopt, fini, fopt, *y, *pnormres, *g, **H, **Hinv, **cholH;
   modselFunction *msfun;
@@ -2803,7 +3968,8 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
   thopt= dvector(0, *nsel); thini= dvector(0, *nsel);
   y= (*pars).y;
 
-  if (priorcode == 13) {
+  //For MOM priors, if ALA is specified then approximate the mean of products via the product of means
+  if ((priorcode==10) | (priorcode == 13)) {
       if ((*(*pars).method ==2) | ((*(*pars).method == -1) & ((*nsel)>0)))  { orthoapprox= true; }
   }
 
@@ -2841,18 +4007,17 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
   msfun= new modselFunction(sel, thlength, pars, NULL);
 
   //Initialize posterior mode
-  msfun->fun= &fgzellgzellSurv; msfun->funupdate= &fgzellgzellSurvupdate; msfun->gradhessUniv= &fgzellgzellgradhess; msfun->hess= &fgzellgzellhess; //Zell
-  msfun->gradUniv= &fgzellgzellgrad;
+  msfun->fun= &fgzellgzellSurv; msfun->funupdate= &fgzellgzellSurvupdate; msfun->gradhessUniv= &fgzellgzell_AFTgradhess; msfun->hess= &fgzellgzellhess_AFT; //Zell
+  msfun->gradUniv= &fgzellgzell_AFTgrad;
   msfun->ftol= 0.001; msfun->thtol= 0.001;
-  //msfun->fun= &anegloglnormalAFT; msfun->funupdate= &anegloglnormalAFTupdate; msfun->gradhessUniv= &anegloglnormalAFTgradhess; //MLE
-
+   
   for (i=0; i< thlength; i++) thini[i]= 0;
   msfun->evalfun(&fini, thini, &funargs); //call evalfun for its side effect of initializing funargs
   msfun->hess(H, thini, sel, &thlength, pars, &funargs);
   inv_posdef(H, thlength, Hinv, &posdef);
   for (i=0; i< thlength; i++) { msfun->gradUniv(g+1+i, i, thini, sel, &thlength, pars, &funargs); g[i+1]= -g[i+1]; }
   Ax(Hinv,g,thini-1,1,thlength,1,thlength);
-
+   
   //Stored posterior mode under previously visited model
   if (*((*pars).usethinit) == 2) {
     for (i=0; i< *nsel; i++) { thopt[i]= ((*pars).thinit)[sel[i]]; }
@@ -2861,26 +4026,26 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
     msfun->evalfun(&fopt, thopt, &funargs);
     if (fopt < fini) { for (i=0; i< *nsel; i++) thini[i]= thopt[i]; }
   }
-
+   
   //Optimize and approximate the integrated likelihood
   if (priorcode != 43) {
     if (priorcode == 13) {
       if (!orthoapprox) {
         msfun->fun= &fpmomgzellSurv;
         msfun->funupdate= &fpmomgzellSurvupdate;
-        msfun->gradhessUniv= &fpmomgzellgradhess;
-        msfun->hess= &fpmomgzellhess;
+        msfun->gradhessUniv= &fpmomgzell_AFTgradhess;
+        msfun->hess= &fpmomgzellhess_AFT;
       }
     } else if (priorcode==33) {
       msfun->fun= &fpemomgzellSurv;
       msfun->funupdate= &fpemomgzellSurvupdate;
-      msfun->gradhessUniv= &fpemomgzellgradhess;
-      msfun->hess= &fpemomgzellhess;
+      msfun->gradhessUniv= &fpemomgzell_AFTgradhess;
+      msfun->hess= &fpemomgzellhess_AFT;
     } else {
       Rf_error("priorcode in SurvMarg not recognized\n");
     }
   }
-
+   
   if ((priorcode != 43) && (!((priorcode == 13) && orthoapprox))) {   //Avoid exact zeroes (0 prior density under non-local priors)
     for (i=0; i< *nsel; i++) {
       if (fabs(thini[i]) < 1.0e-5) {
@@ -2891,31 +4056,26 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
       }
     }
   }
-
+   
   if (*nsel >=15) {
     msfun->cdaNewton(thopt, &fopt, thini, &funargs, 5);
   } else {
     msfun->Newton(thopt, &fopt, thini, &funargs, 5);
   }
-
+   
   ans= msfun->laplaceapprox(thopt, &fopt, H, cholH, true, &funargs); //Laplace approx (also returns H and cholH)
- //ans= msfun->laplaceapprox(thopt, &fopt, &funargs); //Laplace approx
-
-
+  //ans= msfun->laplaceapprox(thopt, &fopt, &funargs); //Laplace approx
+   
+   
   if ((priorcode == 13) && orthoapprox) { //orthogonal approx to posterior expectation of MOM penalty
-    int idx;
-    double pen=0, logtau= log(*((*pars).tau));
-
+    double pen;
+   
     inv_posdef(H, thlength, Hinv, &posdef, cholH); //compute Hinv
-    for (i=0; i< nselgroupsint; i++) {
-      if (nvarinselgroups[i] < 1.1) {
-        idx= (int) (firstingroup[i]+.1);
-        pen += log(thopt[idx]*thopt[idx] + Hinv[idx+1][idx+1]) - logtau;
-      }
-    }
+
+    pen= pmompenalty_approx(thopt, Hinv, (*pars).tau, nselgroupsint, nvarinselgroups, firstingroup);
     ans += pen;
   }
-
+     
   //Store optimal value for use in subsequent calls
   if (*((*pars).usethinit) > 0) {
     int iall;
@@ -2927,6 +4087,7 @@ double SurvMarg(int *sel, int *nsel, struct marginalPars *pars, int priorcode) {
     ((*pars).thinit)[*((*pars).p)]= thopt[*nsel];
     (*((*pars).usethinit))= 2; //next time SurvMarg is called it will initialize at (*pars).thinit
   }
+
 
   //Free memory
   free_dvector(g,1,thlength); free_dmatrix(H,1,thlength,1,thlength); free_dmatrix(Hinv,1,thlength,1,thlength); free_dmatrix(cholH, 1,thlength,1,thlength);
@@ -2956,6 +4117,7 @@ void fpmomgzellSurv(double *f, double *th, int *sel, int *thlength, struct margi
   (*f) -= priordens;
 }
 
+
 //Evaluate negative log-likelihood + log-prior (peMOM + group MOM) and initialize funargs
 void fpemomgzellSurv(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
   double priordens=0;
@@ -2967,12 +4129,23 @@ void fpemomgzellSurv(double *f, double *th, int *sel, int *thlength, struct marg
   (*f) -= priordens;
 }
 
-//Evaluate negative log-likelihood + log-prior (peMOM + group MOM) and initialize funargs
+//Evaluate negative log-likelihood + log-prior (group Zellner + group Zellner) and initialize funargs
 void fgzellgzellSurv(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
   double priordens=0;
 
   anegloglnormalAFT(f, th, sel, thlength, pars, funargs); //evaluate -log(likelihood), initialize funargs
   //negloglnormalAFT(f, th, sel, thlength, pars, funargs); //evaluate -log(likelihood), initialize funargs
+  dgzellgzell(&priordens, th, (*funargs)["nvarinselgroups"], (*funargs)["nselgroups"], (*funargs)["ldetSinv"], (*funargs)["cholSinv"], (*funargs)["cholSini"], true);
+  priordens += dinvgammaC(exp(-2.0*th[*thlength -1]), *((*pars).alpha)/2.0, *((*pars).lambda)/2.0, 1) + log(2.0) - 2.0*th[*thlength -1];
+  (*f) -= priordens;
+}
+
+
+//Same as fgzllgzellSurv assuming that regression coef th=0 (error log-dispersion not assumed to be 0), and initialize funargs
+void fgzellgzellSurv0(double *f, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double *> *funargs) {
+  double priordens=0;
+
+  anegloglnormalAFT0(f, th, sel, thlength, pars, funargs); //evaluate -log(likelihood), initialize funargs
   dgzellgzell(&priordens, th, (*funargs)["nvarinselgroups"], (*funargs)["nselgroups"], (*funargs)["ldetSinv"], (*funargs)["cholSinv"], (*funargs)["cholSini"], true);
   priordens += dinvgammaC(exp(-2.0*th[*thlength -1]), *((*pars).alpha)/2.0, *((*pars).lambda)/2.0, 1) + log(2.0) - 2.0*th[*thlength -1];
   (*f) -= priordens;
@@ -3018,221 +4191,146 @@ void fgzellgzellSurvupdate(double *fnew, double *thjnew, int j, double *f, doubl
 
 
 //Gradient and hessian
-void fpmomgzellgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+void fpmomgzell_AFTgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
   double priorgrad, priorhess;
 
   anegloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
 
-  priorpmomgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
+  pmomgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
 
   (*grad) -= priorgrad; (*hess) -= priorhess;
 }
 
-void fpemomgzellgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+void fpemomgzell_AFTgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
   double priorgrad, priorhess;
 
   anegloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
 
-  priorpemomgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
+  pemomgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
 
   (*grad) -= priorgrad; (*hess) -= priorhess;
 }
 
-void fgzellgzellgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+void fgzellgzell_AFTgradhess(double *grad, double *hess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
   double priorgrad, priorhess;
 
   anegloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFTgradhess(grad, hess, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
 
-  priorgzellgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
+  gzellgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
 
   (*grad) -= priorgrad; (*hess) -= priorhess;
 }
 
-void fgzellgzellgrad(double *grad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+void fgzellgzell_AFTgrad(double *grad, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
   double priorgrad, priorhess;
 
   anegloglnormalAFTgrad(grad, j, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
 
-  priorgzellgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
+  gzellgzellig_gradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs); //contribution from the log-prior
 
   (*grad) -= priorgrad;
 }
 
 
-void fpmomgzellhess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
-  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
-  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+void fpmomgzellhess_AFT(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  //int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  //double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
 
   anegloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
-  for (j=0; j< *thlength; j++) {
-    priorpmomgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
-    hess[j+1][j+1] -= priorhess;
-  }
-  //Add group Zellner's prior contribution to off-diagonal hessian elements
-  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
-  firstingroup=0;
-  for (j=0; j< ngroups; j++) {
-    ningroup= (int) (nvaringroup[j] +.1);
-    if (ningroup>1) {
-      idxini= (int) (cholSini[j]+.1);
-      for (k=0; k< ningroup; k++) {
-        kk= idxini + k*ningroup - k*(k-1)/2;
-        for (l=k+1; l< ningroup; l++) {
-          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
-        }
-      }
-    }
-    firstingroup += ningroup;
-  }
+
+  pmomgzellig_hess(hess, th, sel, thlength, pars, funargs);
+  //for (j=0; j< *thlength; j++) {
+  //  pmomgzellig_gradhess(&priorgrad, &priorhess, j, th, thlength, sel, *thlength -1, pars, funargs);
+  //  hess[j+1][j+1] -= priorhess;
+  //}
+  ////Add group Zellner's prior contribution to off-diagonal hessian elements
+  //ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  //firstingroup=0;
+  //for (j=0; j< ngroups; j++) {
+  //  ningroup= (int) (nvaringroup[j] +.1);
+  //  if (ningroup>1) {
+  //    idxini= (int) (cholSini[j]+.1);
+  //    for (k=0; k< ningroup; k++) {
+  //      kk= idxini + k*ningroup - k*(k-1)/2;
+  //      for (l=k+1; l< ningroup; l++) {
+  //        hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+  //      }
+  //    }
+  //  }
+  //  firstingroup += ningroup;
+  //}
 
 }
 
-void fpemomgzellhess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
-  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
-  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+void fpemomgzellhess_AFT(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+  //int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  //double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
 
   anegloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
-  for (j=0; j< *thlength; j++) {
-    priorpemomgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
-    hess[j+1][j+1] -= priorhess;
-  }
-  //Add group Zellner's prior contribution to off-diagonal hessian elements
-  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
-  firstingroup=0;
-  for (j=0; j< ngroups; j++) {
-    ningroup= (int) (nvaringroup[j] +.1);
-    if (ningroup>1) {
-      idxini= (int) (cholSini[j]+.1);
-      for (k=0; k< ningroup; k++) {
-        kk= idxini + k*ningroup - k*(k-1)/2;
-        for (l=k+1; l< ningroup; l++) {
-          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
-        }
-      }
-    }
-    firstingroup += ningroup;
-  }
+
+  pemomgzellig_hess(hess, th, sel, thlength, pars, funargs);
+  //for (j=0; j< *thlength; j++) {
+  //  pemomgzellig_gradhess(&priorgrad, &priorhess, j, th, *thlength, sel, *thlength -1, pars, funargs);
+  //  hess[j+1][j+1] -= priorhess;
+  //}
+  ////Add group Zellner's prior contribution to off-diagonal hessian elements
+  //ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  //firstingroup=0;
+  //for (j=0; j< ngroups; j++) {
+  //  ningroup= (int) (nvaringroup[j] +.1);
+  //  if (ningroup>1) {
+  //    idxini= (int) (cholSini[j]+.1);
+  //    for (k=0; k< ningroup; k++) {
+  //      kk= idxini + k*ningroup - k*(k-1)/2;
+  //      for (l=k+1; l< ningroup; l++) {
+  //        hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+  //      }
+  //    }
+  //  }
+  //  firstingroup += ningroup;
+  //}
 
 }
 
 
-void fgzellgzellhess(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
+void fgzellgzellhess_AFT(double **hess, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
   /* HESSIAN FOR AFT LOG-LIKELIHOOD Xobs + LOG-LIKELIHOOD Xcens evaluated at any th   */
-  int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
-  double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
+  //int j, k, kk, l, idxini, ngroups, ningroup, firstingroup;
+  //double priorgrad, priorhess, *Sinv= (*funargs)["Sinv"], *nvaringroup= (*funargs)["nvarinselgroups"], *cholSini= (*funargs)["cholSini"];
 
   anegloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
   //negloglnormalAFThess(hess, th, sel, thlength, pars, funargs); //contribution from the log-likelihood
-  for (j=0; j< *thlength; j++) {
-    priorgzellgzellgradhess(&priorgrad, &priorhess, j, th, sel, thlength, pars, funargs);
-    hess[j+1][j+1] -= priorhess;
-  }
-  //Add group Zellner's prior contribution to off-diagonal hessian elements
-  ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
-  firstingroup=0;
-  for (j=0; j< ngroups; j++) {
-    ningroup= (int) (nvaringroup[j] +.1);
-    if (ningroup>1) {
-      idxini= (int) (cholSini[j]+.1);
-      for (k=0; k< ningroup; k++) {
-        kk= idxini + k*ningroup - k*(k-1)/2;
-        for (l=k+1; l< ningroup; l++) {
-          hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
-        }
-      }
-    }
-    firstingroup += ningroup;
-  }
+
+  gzellgzellig_hess(hess, th, sel, thlength, pars, funargs);
+  //for (j=0; j< *thlength; j++) {
+  //  gzellgzellig_gradhess(&priorgrad, &priorhess, j, th, *thlength, sel, *thlength -1, pars, funargs);
+  //  hess[j+1][j+1] -= priorhess;
+  //}
+  ////Add group Zellner's prior contribution to off-diagonal hessian elements
+  //ngroups= (int) (*((*funargs)["nselgroups"]) +.1);
+  //firstingroup=0;
+  //for (j=0; j< ngroups; j++) {
+  //  ningroup= (int) (nvaringroup[j] +.1);
+  //  if (ningroup>1) {
+  //    idxini= (int) (cholSini[j]+.1);
+  //    for (k=0; k< ningroup; k++) {
+  //      kk= idxini + k*ningroup - k*(k-1)/2;
+  //      for (l=k+1; l< ningroup; l++) {
+  //        hess[firstingroup+k+1][firstingroup+l+1] +=  *(Sinv + kk + l-k);  //elem (k,l) in Sinv of group j
+  //      }
+  //    }
+  //  }
+  //  firstingroup += ningroup;
+  //}
 
 }
 
 
-
-//Gradient and hessian wrt th[j] of log pMOM + group Zellner prior
-void priorpmomgzellgradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
-
-  if (j < *thlength -1) { //if th[j] is a regression coefficient
-
-    if (((*pars).isgroup)[sel[j]] == 0) {
-      double tau= *((*pars).tau);
-      (*priorgrad)= 2.0/th[j] - th[j]/tau;
-      (*priorhess)= -2.0/(th[j]*th[j]) - 1.0/tau;
-    } else {
-      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
-      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
-      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
-      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
-      idxini= (int) (cholSini[groupid] +.1);
-      jingroup= j - firstingroup;
-      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
-      (*priorhess)= - Sinv[jj];
-      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
-      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
-      (*priorgrad) = -(*priorgrad);
-    }
-
-  } else { //if exp(th[j]) is the residual precision
-    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
-    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
-  }
-}
-
-
-void priorpemomgzellgradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
-
-  if (j < *thlength -1) { //if th[j] is a regression coefficient
-
-    if (((*pars).isgroup)[sel[j]] == 0) {
-      double tau= *((*pars).tau), th2= th[j]*th[j];
-      (*priorgrad)= 2.0 * tau/(th2 * th[j]) - th[j]/tau;
-      (*priorhess)= -6.0*tau/(th2*th2) - 1.0/tau;
-    } else {
-      int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
-      double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
-      ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
-      firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
-      idxini= (int) (cholSini[groupid] +.1);
-      jingroup= j - firstingroup;
-      jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
-      (*priorhess)= - Sinv[jj];
-      for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
-      for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
-      (*priorgrad) = -(*priorgrad);
-    }
-
-  } else { //if exp(th[j]) is the residual precision
-    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
-    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
-  }
-}
-
-
-void priorgzellgzellgradhess(double *priorgrad, double *priorhess, int j, double *th, int *sel, int *thlength, struct marginalPars *pars, std::map<string, double*> *funargs) {
-
-  if (j < *thlength -1) { //if th[j] is a regression coefficient
-
-    int jingroup, jj, l, ll, idxini, ningroup, firstingroup, groupid= ((*funargs)["selgroups"])[j];
-    double *Sinv= (*funargs)["Sinv"], *cholSini= (*funargs)["cholSini"];
-    ningroup= (int) (((*funargs)["nvarinselgroups"])[groupid] +.1);
-    firstingroup= (int) (((*funargs)["firstingroup"])[groupid] +.1);
-    idxini= (int) (cholSini[groupid] +.1);
-    jingroup= j - firstingroup;
-    jj= idxini + jingroup*ningroup - jingroup*(jingroup-1)/2;
-    (*priorhess)= - Sinv[jj];
-    for (l=0, (*priorgrad)=0; l< jingroup; l++) { ll= idxini + l*ningroup - l*(l-1)/2; (*priorgrad) +=  Sinv[ll+jingroup-l] * th[firstingroup+l]; } //Sinv[jingroup,] %*% th
-    for (l=jingroup; l< ningroup; l++) { (*priorgrad) +=  Sinv[jj+l-jingroup] * th[firstingroup+l]; }
-    (*priorgrad) = -(*priorgrad);
-
-  } else { //if exp(th[j]) is the residual precision
-    (*priorhess)= -2.0 * (*((*pars).lambda) * exp(2.0 * th[j]));
-    (*priorgrad)= 0.5 * (*priorhess) + (*((*pars).alpha));
-  }
-}
 
 
 
@@ -5381,14 +6479,14 @@ double MC_mom_T(double *m,double **Sinv,int *nu,int *r,int *nsel, int *B) {
 
 SEXP pmomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Sngroups, SEXP Snvaringroup) {
   struct marginalPars pars;
-  int SoptimMethod= 1, emptyint=1, usethinit=0;
+  int SoptimMethod= 1, emptyint=1, usethinit=0, knownphi=1;
   double *rans, emptydouble=0, offset=0, *taualpha=NULL;
   crossprodmat *XtX;
   SEXP ans;
 
   XtX= new crossprodmat(REAL(SXtX),INTEGER(Sn)[0],INTEGER(Sp)[0],true);
 
-  set_marginalPars(&pars,INTEGER(Sn),INTEGER(Sn),INTEGER(Sp),REAL(Sy),&emptyint,REAL(Ssumy2),&emptydouble,XtX,REAL(SytX),INTEGER(Smethod),&emptyint,&SoptimMethod,&usethinit,&emptydouble,INTEGER(SB),&emptydouble,&emptydouble,REAL(Sphi),REAL(Stau),&emptydouble,taualpha,taualpha,INTEGER(Sr),NULL,NULL,NULL,NULL,INTEGER(Slogscale),&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
+  set_marginalPars(&pars,&emptyint,INTEGER(Sn),INTEGER(Sn),INTEGER(Sp),REAL(Sy),&emptyint,REAL(Ssumy2),&emptydouble,&emptydouble,&emptydouble,&emptydouble,XtX,REAL(SytX),INTEGER(Smethod),&emptyint,&emptyint,&SoptimMethod,&usethinit,&emptydouble,INTEGER(SB),&emptydouble,&emptydouble,&knownphi,REAL(Sphi),REAL(Stau),&emptydouble,taualpha,taualpha,INTEGER(Sr),NULL,NULL,NULL,NULL,INTEGER(Slogscale),&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
   PROTECT(ans = Rf_allocVector(REALSXP, 1));
   rans = REAL(ans);
   *rans= pmomMarginalKC(INTEGER(Ssel),INTEGER(Snsel),&pars);
@@ -5417,6 +6515,7 @@ double pmomMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
     ans= dnormC_jvec((*pars).y,*(*pars).n,m[1],s,1);
     free_dvector(m,1,1);
   } else {
+
     m= dvector(1,*nsel);
     S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
     addct2XtX(&tauinv,(*pars).XtX,sel,nsel,(*pars).p,S);
@@ -5459,7 +6558,7 @@ double pmomMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
 
 
 SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Sr, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda, SEXP Sngroups, SEXP Snvaringroup) {
-  int SoptimMethod= 1, emptyint=1, usethinit=0;
+  int SoptimMethod= 1, emptyint=1, usethinit=0, knownphi=0;
   double *rans, emptydouble=0, offset=0, *taualpha=NULL;
   struct marginalPars pars;
   crossprodmat *XtX;
@@ -5467,7 +6566,7 @@ SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy
 
   XtX= new crossprodmat(REAL(SXtX),INTEGER(Sn)[0],INTEGER(Sp)[0],true);
 
-  set_marginalPars(&pars,INTEGER(Sn),INTEGER(Sn),INTEGER(Sp),REAL(Sy),&emptyint,REAL(Ssumy2),REAL(Sx),XtX,REAL(SytX),INTEGER(Smethod),&emptyint,&SoptimMethod,&usethinit,&emptydouble,INTEGER(SB),REAL(Salpha),REAL(Slambda),&emptydouble,REAL(Stau),&emptydouble,taualpha,taualpha,INTEGER(Sr),NULL,NULL,NULL,NULL,INTEGER(Slogscale),&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
+  set_marginalPars(&pars,&emptyint,INTEGER(Sn),INTEGER(Sn),INTEGER(Sp),REAL(Sy),&emptyint,REAL(Ssumy2),&emptydouble,&emptydouble,REAL(Sx),&emptydouble,XtX,REAL(SytX),INTEGER(Smethod),&emptyint,&emptyint,&SoptimMethod,&usethinit,&emptydouble,INTEGER(SB),REAL(Salpha),REAL(Slambda),&knownphi,&emptydouble,REAL(Stau),&emptydouble,taualpha,taualpha,INTEGER(Sr),NULL,NULL,NULL,NULL,INTEGER(Slogscale),&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
   PROTECT(ans = Rf_allocVector(REALSXP, 1));
   rans = REAL(ans);
   *rans= pmomMarginalUC(INTEGER(Ssel), INTEGER(Snsel), &pars);
@@ -5479,8 +6578,9 @@ SEXP pmomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy
 
 
 double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
-  int i, j, nu;
-  double num, den, ans=0.0, term1, *m, **S, **Sinv, **Voptinv, detS, tauinv= 1.0/(*(*pars).tau), nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss;
+  int i, j, nu, *isgroup=pars->isgroup, varingroup, singlevarcount=0, maxvarsexact= 3;
+  double num, den, ans=0.0, term1, *m, **S, **Sinv, **Voptinv, detS, tau=*(*pars).tau, tauinv= 1.0/tau, taugroup=*(*pars).taugroup, taugroupinv=1.0/taugroup, logtaus, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss, zero=0;
+  bool hasgroups= (*((*pars).ngroups)) < (*((*pars).p));
 
   if (*nsel == 0) {
 
@@ -5492,6 +6592,9 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   } else {
 
     if (*(*pars).method ==0)  { //Laplace
+      if ((abs(tau - taugroup) > 1e-7) and hasgroups) {
+        Rprintf("Laplace method does not support different tau values between priorCoef and priorGroup\nUsing only tau from priorCoef");
+      }
 
       int prior=1, symmetric=1;
       ans= nlpMargSkewNorm(sel, nsel, pars, &prior, &symmetric);
@@ -5499,7 +6602,16 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
     } else {
 
       m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
-      addct2XtX(&tauinv,(*pars).XtX,sel,nsel,(*pars).p,S);
+      addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);
+      for (i = 1; i <= *nsel; i++ ) {
+        varingroup = isgroup[sel[i-1]];
+        if (varingroup==0) {
+          S[i][i] += tauinv;
+          singlevarcount++;
+        } else {
+          S[i][i] += taugroupinv;
+        }
+      }
       invdet_posdef(S,*nsel,Sinv,&detS);
       Asym_xsel(Sinv,*nsel,(*pars).ytX,sel,m);
       nuhalf= (*(*pars).r)*(*nsel) + .5*(*(*pars).n + *(*pars).alpha);
@@ -5507,7 +6619,8 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
 
       ss= *(*pars).lambda + *(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel);
       num= gamln(&nuhalf) + alphahalf*log(lambdahalf) + nuhalf*(log(2.0) - log(ss));
-      den= (*nsel)*ldoublefact(2*(*(*pars).r)-1.0) + .5*(*(*pars).n * LOG_M_2PI + log(detS)) + (*nsel)*(.5 + *(*pars).r)*log(*(*pars).tau) + gamln(&alphahalf);
+      logtaus = (.5 + *(*pars).r)*(singlevarcount*log(tau) + (*nsel - singlevarcount)*log(taugroup));
+      den= (*nsel)*ldoublefact(2*(*(*pars).r)-1.0) + .5*(*(*pars).n * LOG_M_2PI + log(detS)) + logtaus + gamln(&alphahalf);
 
       if (*(*pars).method ==1) {  //MC
 
@@ -5515,13 +6628,13 @@ double pmomMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
         for (i=1; i<= *nsel; i++) { for (j=i; j<= *nsel; j++) { Sinv[i][j]= Sinv[j][i]= Sinv[i][j]*term1; } } //Vinv matrix
         ans= MC_mom_T(m,Sinv,&nu,(*pars).r,nsel,(*pars).B);
 
-      } else if ((*(*pars).method ==2) | ((*(*pars).method == -1) & ((*nsel)>3)))  { //Orthogonal approx
+      } else if ((*(*pars).method ==2) | ((*(*pars).method == -1) & ((*nsel)>maxvarsexact)))  { //Orthogonal approx
 
         //ans= rsumlogsq(m,(*pars).r,nsel); //old version
         term1= ss / ((double) (nu-2)); // (ss/nu) * nu / (nu-2)
         for (i=1, ans=0; i<=(*nsel); i++) { ans+= log(pow(m[i],2.0) + Sinv[i][i] * term1); }
 
-      } else if ((*(*pars).method == -1) & ((*nsel)<=3)) { //Exact
+      } else if ((*(*pars).method == -1) & ((*nsel)<=maxvarsexact)) { //Exact
 
         Voptinv= dmatrix(1,*nsel,1,*nsel);
         for (i=1; i<= *nsel; i++) for (j=i; j<= *nsel; j++) Voptinv[i][j]= Voptinv[j][i]= Sinv[i][j] * ss / (nu+.0);
@@ -5767,14 +6880,14 @@ void imomIntegralApproxC(double *ILaplace, double *thopt, double **Voptinv, doub
 // - B: number of Monte Carlo samples. Ignored unless method==1.
 // - logscale: if set to 1 result is returned in log scale
 SEXP pimomMarginalKI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP SXtX, SEXP SytX, SEXP Sphi, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Sngroups, SEXP Snvaringroup) {
-  int *sel=INTEGER(Ssel), *nsel=INTEGER(Snsel), *n=INTEGER(Sn), *p=INTEGER(Sp), *method=INTEGER(Smethod), SoptimMethod=1, *B=INTEGER(SB), *logscale=INTEGER(Slogscale), r=1, emptyint=1, usethinit=0;
+  int *sel=INTEGER(Ssel), *nsel=INTEGER(Snsel), *n=INTEGER(Sn), *p=INTEGER(Sp), *method=INTEGER(Smethod), SoptimMethod=1, *B=INTEGER(SB), *logscale=INTEGER(Slogscale), r=1, emptyint=1, usethinit=0, knownphi=1;
   double *y=REAL(Sy), *sumy2=REAL(Ssumy2), *ytX=REAL(SytX), *phi=REAL(Sphi), *tau=REAL(Stau), *rans, emptydouble=0, offset=0, *taualpha=NULL;
   struct marginalPars pars;
   crossprodmat *XtX;
   SEXP ans;
 
   XtX= new crossprodmat(REAL(SXtX),INTEGER(Sn)[0],INTEGER(Sp)[0],true);
-  set_marginalPars(&pars,n,n,p,y,&emptyint,sumy2,&emptydouble,XtX,ytX,method,&emptyint,&SoptimMethod,&usethinit,&emptydouble,B,&emptydouble,&emptydouble,phi,tau,&emptydouble,taualpha,taualpha,&r,NULL,NULL,NULL,NULL,logscale,&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
+  set_marginalPars(&pars,&emptyint,n,n,p,y,&emptyint,sumy2,&emptydouble,&emptydouble,&emptydouble,&emptydouble,XtX,ytX,method,&emptyint,&emptyint,&SoptimMethod,&usethinit,&emptydouble,B,&emptydouble,&emptydouble,&knownphi,phi,tau,&emptydouble,taualpha,taualpha,&r,NULL,NULL,NULL,NULL,logscale,&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
   PROTECT(ans = Rf_allocVector(REALSXP, 1));
   rans = REAL(ans);
   *rans= pimomMarginalKC(sel, nsel, &pars);
@@ -6045,14 +7158,14 @@ double f2int_imom(double phi) {
 
 
 SEXP pimomMarginalUI(SEXP Ssel, SEXP Snsel, SEXP Sn, SEXP Sp, SEXP Sy, SEXP Ssumy2, SEXP Sx, SEXP SXtX, SEXP SytX, SEXP Stau, SEXP Smethod, SEXP SB, SEXP Slogscale, SEXP Salpha, SEXP Slambda, SEXP Sngroups, SEXP Snvaringroup) {
-  int *sel=INTEGER(Ssel), *nsel=INTEGER(Snsel), *n=INTEGER(Sn), *p=INTEGER(Sp), *method=INTEGER(Smethod), *B=INTEGER(SB), *logscale=INTEGER(Slogscale), r=1, SoptimMethod=1, emptyint=1, usethinit=0;
+  int *sel=INTEGER(Ssel), *nsel=INTEGER(Snsel), *n=INTEGER(Sn), *p=INTEGER(Sp), *method=INTEGER(Smethod), *B=INTEGER(SB), *logscale=INTEGER(Slogscale), r=1, SoptimMethod=1, emptyint=1, usethinit=0, knownphi=0;
   double *y=REAL(Sy), *sumy2=REAL(Ssumy2), *x=REAL(Sx), *ytX=REAL(SytX), *tau=REAL(Stau), *alpha=REAL(Salpha), *lambda=REAL(Slambda), *rans, emptydouble=0, offset=0, *taualpha=NULL;
   struct marginalPars pars;
   crossprodmat *XtX;
   SEXP ans;
 
   XtX= new crossprodmat(REAL(SXtX),INTEGER(Sn)[0],INTEGER(Sp)[0],true);
-  set_marginalPars(&pars,n,n,p,y,&emptyint,sumy2,x,XtX,ytX,method,&emptyint,&SoptimMethod,&usethinit,&emptydouble,B,alpha,lambda,&emptydouble,tau,&emptydouble,taualpha,taualpha,&r,NULL,NULL,NULL,NULL,logscale,&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
+  set_marginalPars(&pars,&emptyint,n,n,p,y,&emptyint,sumy2,&emptydouble,&emptydouble,x,&emptydouble,XtX,ytX,method,&emptyint,&emptyint,&SoptimMethod,&usethinit,&emptydouble,B,alpha,lambda,&knownphi,&emptydouble,tau,&emptydouble,taualpha,taualpha,&r,NULL,NULL,NULL,NULL,logscale,&offset,NULL,NULL,INTEGER(Sngroups),NULL,INTEGER(Snvaringroup));
   PROTECT(ans = Rf_allocVector(REALSXP, 1));
   rans = REAL(ans);
   *rans= pimomMarginalUC(sel, nsel, &pars);
@@ -6255,7 +7368,8 @@ double zellnerMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
 // - tau: prior dispersion parameter
 // - logscale: if set to 1 result is returned in log scale
 double normalidMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
-  double *m, s, **S, **Sinv, detS, num, den, tau= *(*pars).tau, tauinv=1/tau, logphi= log(*(*pars).phi), ans=0.0;
+  double *m, s, **S, **Sinv, detS, num, den, tau= *(*pars).tau, tauinv=1/tau, taugroup=*(*pars).taugroup, taugroupinv=1/taugroup, logphi= log(*(*pars).phi), ans=0.0, zero=0;
+  int i, *isgroup=(*pars).isgroup, varingroup, singlevarcount=0;
 
   if (*nsel ==0) {
 
@@ -6268,7 +7382,16 @@ double normalidMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
 
     m= dvector(1,*nsel);
     S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
-    addct2XtX(&tauinv,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX into S
+    addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX into S
+    for (i = 1; i <= *nsel; i++ ) {
+      varingroup = isgroup[sel[i-1]];
+      if (varingroup==0) {
+        S[i][i] += tauinv;
+        singlevarcount++;
+      } else {
+        S[i][i] += taugroupinv;
+      }
+    }
     invdet_posdef(S,*nsel,Sinv,&detS);
     Asym_xsel(Sinv,*nsel,(*pars).ytX,sel,m);
 
@@ -6284,7 +7407,8 @@ double normalidMarginalKC(int *sel, int *nsel, struct marginalPars *pars) {
 }
 
 double normalidMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
-  double num, den, ans=0.0, term1, *m, **S, **Sinv, detS, tau= *(*pars).tau, tauinv=1/tau, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss;
+  double num, den, ans=0.0, term1, *m, **S, **Sinv, detS, tau= *(*pars).tau, tauinv=1/tau, taugroup=*(*pars).taugroup, taugroupinv = 1/taugroup, nuhalf, alphahalf=.5*(*(*pars).alpha), lambdahalf=.5*(*(*pars).lambda), ss, zero=0;
+  int i, singlevarcount=0, *isgroup=(*pars).isgroup, varingroup;
   if (*nsel ==0) {
 
     term1= .5*(*(*pars).n + *(*pars).alpha);
@@ -6295,14 +7419,23 @@ double normalidMarginalUC(int *sel, int *nsel, struct marginalPars *pars) {
   } else {
 
     m= dvector(1,*nsel); S= dmatrix(1,*nsel,1,*nsel); Sinv= dmatrix(1,*nsel,1,*nsel);
-    addct2XtX(&tauinv,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
+    addct2XtX(&zero,(*pars).XtX,sel,nsel,(*pars).p,S);  //copy XtX onto S
+    for (i = 1; i <= *nsel; i++ ) {
+      varingroup = isgroup[sel[i-1]];
+      if (varingroup==0) {
+        S[i][i] += tauinv;
+        singlevarcount++;
+      } else {
+        S[i][i] += taugroupinv;
+      }
+    }
     invdet_posdef(S,*nsel,Sinv,&detS);
     Asym_xsel(Sinv,*nsel,(*pars).ytX,sel,m);
     nuhalf= .5*(*(*pars).n + *(*pars).alpha);
 
     ss= *(*pars).lambda + *(*pars).sumy2 - quadratic_xtAx(m,S,1,*nsel);
     num= gamln(&nuhalf) + alphahalf*log(lambdahalf) + nuhalf*(log(2.0) - log(ss));
-    den= .5*(*(*pars).n * LOG_M_2PI + log(detS)) + .5 * (*nsel) *log(tau) + gamln(&alphahalf);
+    den= .5*(*(*pars).n * LOG_M_2PI + log(detS)) + .5 * (singlevarcount * log(tau) + (*nsel - singlevarcount) * log(taugroup)) + gamln(&alphahalf);
     ans= num - den;
 
     free_dvector(m,1,*nsel); free_dmatrix(S,1,*nsel,1,*nsel); free_dmatrix(Sinv,1,*nsel,1,*nsel);

@@ -24,24 +24,28 @@ hasPostSampling <- function(object) {
   hassamples[2,] =    c('Continuous','normal',  'peMOM',  'peMOM')
   hassamples[3,] =    c('Continuous','normal',  'piMOM',  'piMOM')
   hassamples[4,] =    c('Continuous','normal','zellner','zellner')
-  hassamples[5,] =    c('glm','binomial logit','bic','bic')
-  hassamples[6,] =    c('glm','binomial probit','bic','bic')
-  hassamples[7,] =    c('glm','gamma inverse','bic','bic')
-  hassamples[8,] =    c('glm','inverse.gaussian 1/mu^2','bic','bic')
-  hassamples[9,] =    c('glm','poisson log','bic','bic')
-  hassamples[10,]=    c('Survival','Cox','bic','bic')
-  #hassamples[11,]=    c('Survival','normal','bic','bic') #to be added
+  hassamples[5,] =    c('glm','binomial','bic','bic')
+  hassamples[6,] =    c('glm','binomial logit','bic','bic')
+  hassamples[7,] =    c('glm','binomial probit','bic','bic')
+  hassamples[8,] =    c('glm','gamma inverse','bic','bic')
+  hassamples[9,] =    c('glm','inverse.gaussian 1/mu^2','bic','bic')
+  hassamples[10,] =    c('glm','poisson','bic','bic')
+  hassamples[11,] =    c('glm','poisson log','bic','bic')
+  hassamples[12,]=    c('Survival','Cox','bic','bic')
+  #hassamples[13,]=    c('Survival','normal','bic','bic') #to be added
   #Check if there's variable groups
   hasgroups= (length(object$groups) > length(unique(object$groups)))
   outcometype= object$outcometype; family= object$family; priorCoef= object$prior$priorCoef@priorDistr; priorGroup= object$prior$priorGroup@priorDistr
   outcomefam= paste(outcometype,family,sep=',')
   if (hasgroups) {
-    outcomefamprior= paste(outcomefam,priorCoef,priorGroup,sep=',')
+      outcomefamprior= paste(outcomefam,priorCoef,priorGroup,sep=',')
+      avail_outcomefamprior= apply(hassamples,1,paste,collapse=',')
   } else {
-    outcomefamprior= paste(outcomefam,priorCoef)
+      outcomefamprior= paste(outcomefam,priorCoef,sep=',')
+      avail_outcomefamprior= apply(hassamples[,1:3],1,paste,collapse=',')
   }
   found= outcomefam %in% apply(hassamples[,1:2],1,paste,collapse=',')
-  exactsampling= outcomefamprior  %in% apply(hassamples,1,paste,collapse=',')
+  exactsampling= outcomefamprior  %in% avail_outcomefamprior
   if (!found) {
     cat("Inference on parameters currently only available for the following settings: \n\n")
     print(hassamples)
@@ -101,7 +105,7 @@ setMethod("coefByModel", signature(object='msfit'), function(object, maxmodels, 
     outcometype= object$outcometype; family= object$family
     b= min(50, ceiling((burnin/niter) * niter))
     #List models for which estimates are to be obtained
-    pp= postProb(object,method=pp)
+    pp= postProb(object,method="norm")
     modelid= strsplit(as.character(pp$modelid), split=',')
     modelid= modelid[1:min(maxmodels,length(modelid))]
     priorCoef= object$priors$priorCoef
@@ -114,9 +118,10 @@ setMethod("coefByModel", signature(object='msfit'), function(object, maxmodels, 
       for (i in 1:length(modelid)) {  #for each model
         colsel= as.numeric(modelid[[i]])
         bm= coefOneModel(y=y, x=x[,colsel,drop=FALSE], outcometype=outcometype, family=family, priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, alpha=alpha, niter=niter, burnin=b)
-        ans[[1]][i,colsel]= bm[,1]
-        ans[[2]][i,colsel]= bm[,2]
-        ans[[3]][i,colsel]= bm[,3]
+        colselphi= c(colsel,ncol(ans[[1]]))
+        ans[[1]][i,colselphi]= bm[,1]
+        ans[[2]][i,colselphi]= bm[,2]
+        ans[[3]][i,colselphi]= bm[,3]
       }
       if (is.null(colnames(x))) nn= c(paste('beta',1:ncol(x),sep=''),'phi') else nn= c(colnames(x),'phi')
     } else {                                                   ##GLM or Survival model
@@ -237,7 +242,7 @@ return(ans)
 )
 
 
-defaultmom= function(outcometype=outcometype,family=family) {
+defaultmom= function(outcometype,family) {
     if (outcometype=='Continuous') {
         cat("Using default prior for continuous outcomes priorCoef=momprior(tau=0.348), priorVar=igprior(.01,.01)\n")
         priorCoef= momprior(tau=0.348)
@@ -246,6 +251,10 @@ defaultmom= function(outcometype=outcometype,family=family) {
         cat("Using default prior for Normal AFT survival outcomes priorCoef=momprior(tau=0.192), priorVar=igprior(3,3)\n")
         priorCoef= momprior(tau=0.192)
         priorVar= igprior(alpha=3,lambda=3)
+    } else if (outcometype=='glm') {
+        cat("Using default prior for GLMs priorCoef=momprior(tau=1/3), priorVar=igprior(.01,.01)\n")
+        priorCoef= momprior(tau=1/3)
+        priorVar= igprior(alpha=.01,lambda=.01)
     } else {
       stop("There is not default priorCoef for this outcome type")
     }
@@ -256,7 +265,7 @@ defaultmom= function(outcometype=outcometype,family=family) {
 
 
 #### General model selection routines
-modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), constraints, center=TRUE, scale=TRUE, enumerate, includevars=rep(FALSE,ncol(x)), maxvars, niter=5000, thinning=1, burnin=round(niter/10), family='normal', priorCoef, priorGroup, priorDelta=modelbbprior(1,1), priorConstraints=priorDelta, priorVar=igprior(.01,.01), priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA', B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE) {
+modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), constraints, center=TRUE, scale=TRUE, enumerate, includevars=rep(FALSE,ncol(x)), maxvars, niter=5000, thinning=1, burnin=round(niter/10), family='normal', priorCoef, priorGroup, priorDelta=modelbbprior(1,1), priorConstraints, priorVar=igprior(.01,.01), priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)), initSearch='greedy', method='auto', adj.overdisp='intercept', hess='asymp', optimMethod, B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE) {
 # Input
 # - y: either formula with the regression equation or vector with response variable. If a formula arguments x, groups & constraints are ignored
 # - x: design matrix with all potential predictors
@@ -282,7 +291,8 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
 # - phi: residual variance. Typically this is unknown and therefore left missing. If specified argument priorVar is ignored.
 # - deltaini: logical vector of length ncol(x) indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model
 # - initSearch: algorithm to refine deltaini. initSearch=='greedy' uses a greedy Gibbs sampling search. initSearch=='SCAD' sets deltaini to the non-zero elements in a SCAD fit with cross-validated regularization parameter. initSearch=='none' leaves deltaini unmodified.
-# - method: method to compute marginal densities. method=='Laplace' for Laplace approx, method=='MC' for Importance Sampling, method=='Hybrid' for Hybrid Laplace-IS (the latter method is only used for piMOM prior with unknown residual variance phi), method='plugin'
+# - method: method to compute marginal densities. method=='Laplace' for Laplace approx, method=='MC' for Importance Sampling, method=='Hybrid' for Hybrid Laplace-IS (the latter method is only used for piMOM prior with unknown residual variance phi), method='ALA' (former method=='plugin')
+# - adj.overdisp: for method=='ALA' it indicates the over-dispersion adjustment to be made in models where the dispersion parameter is fixed, as in logistic and Poisson regression. adj.overdisp='none' for no adjustment (not recommended, particularly for Poisson models). adj.overdisp='intercept' to estimate over-dispersion from the intercept-only model. ad.overdisp='residuals' from the Pearson residuals of each model (slightly higher computational cost)
 # - hess: only used for asymmetric Laplace errors. When hess=='asymp' the asymptotic hessian is used to compute the Laplace approximation to the marginal likelihood, when hess=='asympDiagAdj' a diagonal adjustment to the asymptotic Hessian is used
 # - optimMethod: method to maximize objective function when method=='Laplace' or method=='MC'. Only used for family=='twopiecenormal'. optimMethod=='LMA' uses modified Newton-Raphson algorithm, 'CDA' coordinate descent algorithm
 # - B: number of samples to use in Importance Sampling scheme. Ignored if method=='Laplace'.
@@ -299,6 +309,8 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
   x <- tmp$x; y <- tmp$y; formula <- tmp$formula;
   splineDegree <- tmp$splineDegree
   if (!is.null(tmp$groups)) groups <- tmp$groups
+  if (length(groups) != ncol(x)) stop(paste("groups has the wrong length. It should have length",ncol(x)))
+  hasgroups <- tmp$hasgroups
   if (!is.null(tmp$constraints)) constraints <- tmp$constraints
   outcometype <- tmp$outcometype; uncens <- tmp$uncens; ordery <- tmp$ordery
   typeofvar <- tmp$typeofvar
@@ -325,7 +337,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
   ngroups= tmp$ngroups; constraints= tmp$constraints; invconstraints= tmp$invconstraints; nvaringroup=tmp$nvaringroup; groups=tmp$groups
   if (missing(enumerate)) enumerate= ifelse(ngroups<15,TRUE,FALSE)
 
-  #Standardize (y,x) to mean 0 and variance 1
+  #Standardize (y,x) to mean 0 and variance 1 (for continuous or log-survival time outcomes only)
   if (!is.vector(y)) { y <- as.double(as.vector(y)) } else { y <- as.double(y) }
   if (!is.matrix(x)) x <- as.matrix(x)
   mx= colMeans(x); sx= sqrt(colMeans(x^2) - mx^2) * sqrt(n/(n-1))
@@ -342,18 +354,17 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
 
   #Format arguments for .Call
   if (missing(deltaini)) {
-    deltaini= as.integer(which(includevars)); ndeltaini= as.integer(length(deltaini))
+    deltaini= as.integer(which(includevars)-1); ndeltaini= as.integer(length(deltaini))
   } else {
     if (length(deltaini)!=p) stop('deltaini must be of length ncol(x)')
     if (!is.logical(deltaini)) { stop('deltaini must be of type logical') } else { ndeltaini <- as.integer(sum(deltaini | includevars)); deltaini <- as.integer(which(deltaini | includevars)-1) }
   }
 
-  method= formatmsMethod(method=method, priorCoef=priorCoef, knownphi=knownphi)
-  hess <- as.integer(ifelse(hess=='asympDiagAdj',2,1))
-  optimMethod <- as.integer(ifelse(optimMethod=='CDA',2,1))
+  method <-  formatmsMethod(method=method, optimMethod=optimMethod, priorCoef=priorCoef, priorGroup=priorGroup, knownphi=knownphi, outcometype=outcometype, family=family, hasgroups=hasgroups, adj.overdisp=adj.overdisp, hess=hess)
+  optimMethod <- method$optimMethod; adj.overdisp <- method$adj.overdisp; hesstype <- method$hesstype; method <- method$method
 
   niter <- as.integer(niter); burnin <- as.integer(burnin); thinning <- as.integer(thinning); B <- as.integer(B)
-  sumy2 <- as.double(sum(ystd^2)); ytX <- as.vector(matrix(ystd,nrow=1) %*% xstd)
+  sumy2 <- as.double(sum(ystd^2)); sumy <- as.double(sum(ystd)); ytX <- as.vector(matrix(ystd,nrow=1) %*% xstd); colsumsx <- as.double(colSums(xstd))
   if (XtXprecomp) {
       XtX= t(xstd) %*% xstd
       hasXtX= as.logical(TRUE)
@@ -362,15 +373,20 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
       hasXtX= as.logical(FALSE)
   }
 
-  tmp= formatmsPriorsMarg(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew)
+  ffamily= formatFamily(family, issurvival= length(uncens)>0)
+  familyint= ffamily$familyint; familygreedy= ffamily$familygreedy
+  if (familyint == 22) { sumlogyfact= as.double(sum(lgamma(ystd+1))) } else { sumlogyfact= as.double(0) } #Poisson regression
+    
+  if (!is.null(colnames(xstd))) { nn <- colnames(xstd) } else { nn <- paste('x',1:ncol(xstd),sep='') }
+
+  tmp= formatmsPriorsMarg(priorCoef=priorCoef, priorGroup=priorGroup, priorVar=priorVar, priorSkew=priorSkew, n=n)
   r= tmp$r; prior= tmp$prior; priorgr= tmp$priorgr; tau=tmp$tau; taugroup=tmp$taugroup; alpha=tmp$alpha; lambda=tmp$lambda; taualpha=tmp$taualpha; fixatanhalpha=tmp$fixatanhalpha
-  tmp= formatmsPriorsModel(priorDelta=priorDelta, priorConstraints=priorConstraints)
+  priorCoef= tmp$priorCoef; priorGroup= tmp$priorGroup
+    
+  priorConstraints <- defaultpriorConstraints(priorDelta, priorConstraints)
+  tmp= formatmsPriorsModel(priorDelta=priorDelta, priorConstraints=priorConstraints, constraints=constraints)
   prDelta=tmp$prDelta; prDeltap=tmp$prDeltap; parprDeltap=tmp$parprDeltap
   prConstr=tmp$prConstr; prConstrp= tmp$prConstrp; parprConstrp= tmp$parprConstrp
-
-  if (family=='auto') { familyint= 0; familygreedy=1 } else if (family=='normal') { familyint= familygreedy= ifelse(length(uncens)==0,1,11) } else if (family=='twopiecenormal') { familyint= 2; familygreedy=1 } else if (family=='laplace') { familyint= 3; familygreedy=1 } else if (family=='twopiecelaplace') { familyint= 4; familygreedy=1 } else stop("family not available")
-  familyint= as.integer(familyint); familygreedy= as.integer(familygreedy)
-  if (!is.null(colnames(xstd))) { nn <- colnames(xstd) } else { nn <- paste('x',1:ncol(xstd),sep='') }
 
   #Run model selection
   if (!enumerate) {
@@ -380,7 +396,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
     postModeProb <- double(1)
     if (initSearch=='greedy') {
       niterGreed <- as.integer(100)
-      ans= .Call("greedyVarSelCI",knownphi,familygreedy,prior,priorgr,niterGreed,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,xstd,hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
+      ans= .Call("greedyVarSelCI",knownphi,familygreedy,prior,priorgr,niterGreed,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,sumy,sumlogyfact,xstd,colsumsx,hasXtX,XtX,ytX,method,adj.overdisp,hesstype,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
       postMode <- ans[[1]]; postModeProb <- ans[[2]]
       if (familyint==0) { postMode <- as.integer(c(postMode,0,0)); postModeProb <- as.double(postModeProb - 2*log(2)) }
       postMode[includevars==1] <- TRUE
@@ -396,7 +412,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
     }
 
     #Run MCMC
-    ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
+    ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,sumy,sumlogyfact,as.double(xstd),colsumsx,hasXtX,XtX,ytX,method,adj.overdisp,hesstype,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postSample <- matrix(ans[[1]],ncol=ifelse(familyint!=0,p,p+2))
     margpp <- ans[[2]]; postMode <- ans[[3]]; postModeProb <- ans[[4]]; postProb <- ans[[5]]
     postmean= postvar= NULL
@@ -413,7 +429,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
     nmodels= as.integer(nrow(models))
     models= as.integer(models)
     includevars= as.integer(includevars)
-    ans= .Call("modelSelectionEnumCI", nmodels,models,knownphi,familyint,prior,priorgr,n,p,ystd,uncens,sumy2,as.double(xstd),hasXtX,XtX,ytX,method,hess,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
+    ans= .Call("modelSelectionEnumCI", nmodels,models,knownphi,familyint,prior,priorgr,n,p,ystd,uncens,sumy2,sumy,sumlogyfact,as.double(xstd),colsumsx,hasXtX,XtX,ytX,method,adj.overdisp,hesstype,optimMethod,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postMode <- ans[[1]]; postModeProb <- ans[[2]]; postProb <- ans[[3]]
     postSample <- matrix(nrow=0,ncol=ifelse(familyint!=0,p,p+2))
     models <- matrix(models,nrow=nmodels)
@@ -452,6 +468,8 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
 # format input data from either formula (y), formula and data.frame (y,data) or matrix and vector (y, x)
 # it accepts smoothterms, groups and survival data
 formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
+  valid_families <- c('normal','twopiecenormal','laplace','twopiecelaplace','auto','binomial','binomial logit','poisson','poisson log')
+  if (!(family %in% valid_families)) stop(paste("Invalid family. Valid values are", valid_families))
   call <- match.call()
   groups <- NULL; constraints <- NULL; ordery <- NULL
   if ('formula' %in% class(y)) {
@@ -492,9 +510,17 @@ formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
   }
   if (nrow(x)!=length(y)) stop('nrow(x) must be equal to length(y)')
   if (any(is.na(y))) stop('y contains NAs, this is currently not supported, please remove the NAs')
+  hasgroups <-  (length(groups) > length(unique(groups)))
+  y <- as.double(y)
+  #Check that support of y is valid for the specified family
+  if (family %in% c('binomial','binomial logit')) {
+      if (any(!(y %in% c(0,1)))) stop("Invalid value for the response. For logistic regression it must be 0 or 1")
+  } else if (family %in% c('poisson','poisson logit')) {
+      if (any(y < 0) || any((y %% 1) != 0)) stop("Invalid value for the response. For Poisson regression it must be a natural number")
+  }
   ans <- list(
     x=x, y=y, formula=formula, is_formula=is_formula, splineDegree=splineDegree,
-    groups=groups, constraints=constraints, outcometype=outcometype, uncens=uncens,
+    groups=groups, hasgroups=hasgroups, constraints=constraints, outcometype=outcometype, uncens=uncens,
     ordery=ordery, typeofvar=typeofvar
   )
   return(ans)
@@ -552,48 +578,101 @@ createDesign <- function(formula, data, smoothterms, subset, na.action, splineDe
     #Add spline terms
     if (!missing(smoothterms)) {
         if (!any(c('formula','matrix','data.frame') %in% class(smoothterms))) stop("smoothterms should be of class 'formula', 'matrix' or 'data.frame'")
-        maxgroups= max(groups)
-        if ('formula' %in% class(smoothterms)) {
-            smoothterms= formula(paste("~ ",-1,"+",as.character(smoothterms)[2])) #remove intercept
-            L= createDesign(smoothterms, data=data, subset=subset, na.action=na.action)$x
-        } else {
-            L= as.matrix(smoothterms)
-            if (is.null(colnames(L))) colnames(L)= paste("L",1:ncol(L),sep="")
-        }
-        W <- matrix(NA,nrow=nrow(L),ncol=(nknots-4)*ncol(L))
-        namesW <- character(ncol(W))
-        groupsW <- integer(ncol(W)); constraintsW= vector("list",ncol(L))
-        groupsL <- integer(ncol(L)); constraintsL= lapply(1:ncol(L), function(i) integer(0))
-        selL= rep(FALSE,ncol(L)); nselL= 0
-        for (j in 1:ncol(L)) {
-            m= range(L[,j])
-            tmp= bspline(L[,j], degree=splineDegree, knots=seq(m[1],m[2],length=nknots)) #equally-spaced knots
-            Lj= cbind(1,L[,j]); b= solve(t(Lj) %*% Lj) %*% (t(Lj) %*% tmp)
-            idx= (1+(j-1)*(nknots-4)):(j*(nknots-4))
-            W[,idx]= tmp - Lj %*% b #project splines onto space orthogonal to linear term
-            namesW[idx]= paste(colnames(L)[j],'.s',1:length(idx),sep='')
-            repeated= which(colnames(x)==colnames(L)[j])
-            if (length(repeated)==1) {  #linear term was already in x
-                constraintsW[[j]]= groups[repeated]
-            } else {                    #linear term wasn't in x
-                selL[j]= TRUE
-                nselL= nselL+1
-                groupsL[j]= maxgroups + nselL
-                constraintsW[[j]]= groupsL[j]
-            }
-            groupsW[idx]= j
-        }
-        colnames(W)= namesW
-        groupsW= maxgroups + nselL + groupsW
-        varW= (colMeans(W^2) - colMeans(W)^2) * nrow(W)/(nrow(W)-1)
-        if (any(varW<1.0e-4)) { W= W[,varW>1.0e-4]; groupsW= groupsW[varW>1.0e-4]; constraintsW= constraintsW[unique(groupsW-min(groupsW)+1)] }
-        x= cbind(x,L[,selL],W)
-        groups= c(groups, groupsL[selL], groupsW)
-        typeofvar= c(typeofvar, rep('numeric',sum(selL)+length(groupsW)))
-        constraints= c(constraints, constraintsL[selL], constraintsW)
+        Snested= nestedSplines(x=x, groups=groups, smoothterms=smoothterms, data=data, subset=subset, na.action=na.action, splineDegree=splineDegree, nknots=nknots)
+        x= cbind(x, Snested$L, Snested$W)
+        groups= c(groups, Snested$groups, Snested$groupsW)
+        typeofvar= c(typeofvar, Snested$typeofvar)
+        constraints= c(constraints, Snested$constraintsL, Snested$constraintsW)
+        #old code, before structuring nestedSplines as a separate function
+        #x= cbind(x,L[,selL],W)
+        #groups= c(groups, groupsL[selL], groupsW)
+        #typeofvar= c(typeofvar, rep('numeric',sum(selL)+length(groupsW)))
+        #constraints= c(constraints, constraintsL[selL], constraintsW)
     }
     return(list(y=y,x=x,groups=groups,constraints=constraints,typeofvar=typeofvar))
 }
+
+
+#Create design matrix for nested splines: linear within knots[1], knots[1] within knots[2], etc.
+nestedSplines= function(x, groups, smoothterms, data, subset, na.action, splineDegree, nknots) {
+    if (length(nknots)>1) nknots= nknots[order(nknots)]
+    maxgroups= max(groups)
+    if ('formula' %in% class(smoothterms)) {
+        smoothterms= formula(paste("~ ",-1,"+",as.character(smoothterms)[2])) #remove intercept
+        L= createDesign(smoothterms, data=data, subset=subset, na.action=na.action)$x
+    } else {
+        L= as.matrix(smoothterms)
+        if (is.null(colnames(L))) colnames(L)= paste("L",1:ncol(L),sep="")
+    }
+
+    W= constraintsW= constraintsL= groupsW= groupsL= vector("list", length(nknots))
+    for (kk in 1:length(nknots)) {
+        W[[kk]] <- matrix(NA,nrow=nrow(L),ncol=(nknots[kk]-4)*ncol(L))
+        namesW <- character(ncol(W[[kk]]))
+        groupsW[[kk]] <- integer(ncol(W[[kk]])); constraintsW[[kk]]= vector("list",ncol(L))
+        groupsL[[kk]] <- integer(ncol(L)); constraintsL[[kk]]= lapply(1:ncol(L), function(i) integer(0))
+        selL= rep(FALSE,ncol(L)); nselL= 0
+        for (j in 1:ncol(L)) {
+            m= range(L[,j])
+            tmp= bspline(L[,j], degree=splineDegree, knots=seq(m[1],m[2],length=nknots[kk])) #equally-spaced knots
+            Lj= cbind(1,L[,j]); b= solve(t(Lj) %*% Lj) %*% (t(Lj) %*% tmp)
+            idx= (1+(j-1)*(nknots[kk]-4)):(j*(nknots[kk]-4))
+            W[[kk]][,idx]= tmp - Lj %*% b #project splines onto space orthogonal to linear term
+            namesW[idx]= paste(colnames(L)[j],'.s',1:length(idx),sep='')
+            repeated= which(colnames(x)==colnames(L)[j])
+            if (length(repeated)==1) {  #linear term was already in x
+                constraintsW[[kk]][[j]]= groups[repeated]
+            } else {                    #linear term wasn't in x
+                selL[j]= TRUE
+                nselL= nselL+1
+                groupsL[[kk]][j]= maxgroups + nselL
+                constraintsW[[kk]][[j]]= groupsL[[kk]][j]
+            }
+            groupsW[[kk]][idx]= j
+        }
+        colnames(W[[kk]])= namesW
+        groupsW[[kk]]= maxgroups + nselL + groupsW[[kk]]
+        varW= (colMeans(W[[kk]]^2) - colMeans(W[[kk]])^2) * nrow(W[[kk]])/(nrow(W[[kk]])-1)
+        if (any(varW<1.0e-4)) {
+            W[[kk]]= W[[kk]][,varW>1.0e-4]; groupsW[[kk]]= groupsW[[kk]][varW>1.0e-4]; constraintsW[[kk]]= constraintsW[[kk]][unique(groupsW[[kk]]-min(groupsW[[kk]])+1)]
+        }
+    }
+
+    #Combine design matrices hierarchically into single matrix with hierarchical constraints
+    Wall= W[[1]]; groupsWall= groupsW[[1]]; constraintsWall= constraintsW[[1]]
+    maxgroups= max(groupsWall)
+    if (length(nknots)==1) {
+        ans= list(L=L[,selL], W=Wall, groupsL=groupsL[selL], groupsW=groupsWall, typeofvar= rep('numeric',sum(selL)+length(groupsW)), constraintsL=constraintsL[selL], constraintsW=constraintsWall)
+    } else {
+        groupsWidx= unique(groupsW[[1]])
+        for (kk in 2:length(nknots)) {
+            keep= vector("list",length(groupsWidx))
+            for (g in 1:length(keep)) {
+                sel1= which(groupsW[[kk]] == groupsWidx[g])
+                sel2= which(groupsWall == groupsWidx[g])
+                r= cor(W[[kk]][,sel1], Wall[,sel2])  #correlation with basis with previous number of knots
+                o= order(abs(apply(r, 1, max)))      #sort by max absolute correlation
+                keep[[g]]= sel1[o[1:(length(sel1) - sum(groupsW[[kk-1]] == groupsWidx[g]))]]
+                keep[[g]]= keep[[g]][order(keep[[g]])]
+            }
+            newgroups= groupsW[[kk]][unlist(keep)]; newgroups= newgroups + maxgroups - min(newgroups) + 1
+            maxgroups= max(newgroups)
+            newconstraintsW= as.list(unique(newgroups) - length(groupsWidx))
+            Wall= cbind(Wall, W[[kk]][,unlist(keep)])
+            groupsWall= c(groupsWall, newgroups)
+            constraintsWall= c(constraintsWall, newconstraintsW)
+        }
+        for (j in 1:ncol(L)) {
+            pattern= sub("\\[","\\\\[",colnames(L)[j]); pattern= sub("\\]","\\\\]",pattern)
+            selj= grep(pattern, colnames(Wall))
+            colnames(Wall)[selj]= paste(colnames(L)[j],'.s',1:length(selj), sep='')
+        }
+        ans= list(L=L[,selL], W=Wall, groupsL=groupsL[selL], groupsW=groupsWall, typeofvar= rep('numeric',sum(selL)+length(groupsWall)), constraintsL=constraintsL[selL], constraintsW=constraintsWall)
+    }
+
+    return(ans)
+}
+
 
 
 
@@ -698,7 +777,57 @@ listmodels= function(vars2list, includevars=rep(FALSE,length(vars2list)), fixedv
 
 
 #Routine to format method indicating how integrated likelihoods should be computed in modelSelection
-formatmsMethod= function(method, priorCoef, knownphi) {
+#
+#For any method other than 'auto', it sets a numeric code corresponding to that method to pass onto C.
+#for method=='auto', the integration method is decided automatically according to the following rules
+#
+# 1. Continuous outcomes
+# - if family normal, no groups: for pMOM exact / ALA; for other NLPs & LPs: Laplace
+# - if family normal, groups:  for pMOMgMOM and pMOMgZell ALA; for other NLPs & LPs: Laplace
+# - if family != normal: Laplace approximation (since ALA not currently implemented)
+#
+# 2. Survival outcomes. Use ALA when available, LA otherwise. Currently ALA available for pmom/groupMOM/groupzellner + pmom/groupMOM/groupzellner
+#
+# 3. GLMs. Laplace approximation
+#
+# OUTPUT
+#
+#   method
+#   0 means Laplace approximation (note: for normal outcomes + normal priors this means the calculation is exact)
+#   1 means Monte Carlo (Importance Sampling)
+#   2 means ALA (approximate Laplace approximation)
+#   -1 only available for pMOM, it means to use exact calculation for small models (<=3 parameters) and ALA for larger models
+#  
+#  optimMethod: 1 means Newton-Raphson type algorithm, 2 means Coordinate Descent Algorith, 0 means use the default. This argument is used in twopiecenormal models and GLMs, else it's ignored
+#
+#  hesstype: what type of hessian to use in twopiecelaplace models, where the observed hessian is not defined
+#
+#  adj.overdisp
+#  0: no over-dispersion adjustment
+#  1: estimate over-dispersion from intercept-only model
+#  2: estimate over-dispersion from Pearson residuals under each model
+formatmsMethod= function(method, optimMethod, priorCoef, priorGroup, knownphi, outcometype, family, hasgroups, adj.overdisp, hess) {
+  hesstype <- as.integer(ifelse(hess=='asympDiagAdj',2,1))
+
+  #Obtain code for the optimization method
+  if (missing(optimMethod)) optimMethod <- 'auto'
+  if (outcometype == 'glm') {
+    if (optimMethod=='auto') {
+        optimMethod <- as.integer(0)
+    } else if (optimMethod %in% c('Newton','LMA')) {
+        optimMethod <- as.integer(1)
+    } else if (optimMethod == 'CDA') {
+        optimMethod <- as.integer(2)
+    } else { stop("Invalid optimMethod. For this family, only 'auto', 'Newton', 'LMA' or 'CDA' are implemented") }
+  } else {
+    if (optimMethod %in% c('Newton','LMA')) {
+        optimMethod <- as.integer(1)
+    } else {
+        optimMethod <- as.integer(2)
+    }
+  }
+
+  #Obtain code for the method to compute the integrated likelihood
   if (method=='Laplace') {
     method <- as.integer(0)
   } else if (method=='MC') {
@@ -710,59 +839,109 @@ formatmsMethod= function(method, priorCoef, knownphi) {
     } else {
       method <- as.integer(2)
     }
+  } else if (method=='ALA') {
+      method <- as.integer(2)
   } else if (method=='auto') {
-    if (priorCoef@priorDistr=='pMOM') { method <- as.integer(-1) } else { method <- as.integer(0) }
-  } else if (method=='plugin') {
+    if (outcometype=='Continuous') {
+      if (family=='normal') {
+          if (!hasgroups) {
+            if (priorCoef@priorDistr=='pMOM') { method <- as.integer(-1) } else { method <- as.integer(0) }
+          } else {
+            if ((priorCoef@priorDistr=='pMOM') & (priorGroup@priorDistr %in% c('groupMOM','zellner','groupzellner'))) {
+                method <- as.integer(2)
+            } else { method <- as.integer(0) }
+          }
+      } else {
+          method <- as.integer(0)
+      }
+    } else if (outcometype=='Survival') {
+      if (family=='normal') {
+        if ((priorCoef@priorDistr %in% c('pMOM','groupMOM','groupzellner')) & (priorGroup@priorDistr %in% c('pMOM','groupMOM','groupzellner'))) {
+           method <- as.integer(2)
+        } else {
+           method <- as.integer(0)
+        }
+      } else { stop("For survival outcomes, only family=='normal' currently implemented") }
+    } else if (outcometype=='glm') {
+        method <- as.integer(0)
+    } else { stop("outcometype must be 'Continuous', 'Survival' or 'glm'") }
+  } else if ((method=='ALA') | (method=='plugin')) {
     method <- as.integer(2)
   } else {
     stop("Invalid 'method'")
   }
-  return(method)
+
+  adj.overdisp <- as.integer(ifelse(adj.overdisp=='none',0,ifelse(adj.overdisp=='intercept',1,2)))
+  ans <- list(method=method, optimMethod=optimMethod, adj.overdisp=adj.overdisp, hesstype= hesstype)
+  return(ans)
 }
 
 #Routine to format modelSelection prior distribution parameters for marginal likelihood
 #Input: priorCoef, priorVar, priorGroup, priorSkew
 #Output: parameters for prior on coefficients (r, prior, tau), prior on variance parameter (alpha, lambda), skewness parameter (taualpha, fixatanhalpha)
-formatmsPriorsMarg <- function(priorCoef, priorGroup, priorVar, priorSkew) {
+formatmsPriorsMarg <- function(priorCoef, priorGroup, priorVar, priorSkew, n) {
   r= as.integer(1)
+  has_taustd <- "taustd" %in% names(priorCoef@priorPars)
+  has_taugroupstd <- "taustd" %in% names(priorGroup@priorPars)
+  if (has_taustd) {
+    taustd <- as.double(priorCoef@priorPars['taustd'])
+  } else {
+    tau <- as.double(priorCoef@priorPars['tau'])
+  }
+  if (has_taugroupstd) {
+    taugroupstd <- as.double(priorGroup@priorPars['taustd'])
+  } else {
+    taugroup <- as.double(priorGroup@priorPars['tau'])
+  }
   if (priorCoef@priorDistr=='pMOM') {
-    r <- as.integer(priorCoef@priorPars['r']); prior <- as.integer(0)
+    r <- as.integer(priorCoef@priorPars['r'])
+    prior <- as.integer(0)
+    if (has_taustd) tau <- taustd * 1/3
   } else if (priorCoef@priorDistr=='piMOM') {
     prior <- as.integer(1)
   } else if (priorCoef@priorDistr=='peMOM') {
     prior <- as.integer(2)
   } else if (priorCoef@priorDistr=='zellner') {
     prior <- as.integer(3)
+    if (has_taustd) tau <- taustd * n
   } else if (priorCoef@priorDistr=='normalid') {
     prior <- as.integer(4)
+    if (has_taustd) tau <- taustd
+  } else if (priorCoef@priorDistr=='groupMOM') {
+    prior <- as.integer(10)
+    if (has_taustd) tau <- taustd
   } else if (priorCoef@priorDistr=='groupzellner') {
     prior <- as.integer(13)
+    if (has_taustd) tau <- taustd * n
   } else {
     stop('Prior specified in priorDistr not recognized')
   }
   if (priorGroup@priorDistr=='pMOM') {
     priorgr= as.integer(0)
+    if (has_taugroupstd) taugroup <- taugroupstd * 1/3
   } else if (priorGroup@priorDistr=='piMOM') {
     priorgr= as.integer(1)
   } else if (priorGroup@priorDistr=='peMOM') {
     priorgr= as.integer(2)
   } else if (priorGroup@priorDistr=='zellner') {
-      priorgr= as.integer(3)
+    priorgr= as.integer(3)
+    if (has_taugroupstd) taugroup <- taugroupstd * n
   } else if (priorGroup@priorDistr=='normalid') {
-      priorgr= as.integer(4)
+    priorgr= as.integer(4)
+    if (has_taugroupstd) taugroup <- taugroupstd
   } else if (priorGroup@priorDistr=='groupMOM') {
     priorgr= as.integer(10)
+    if (has_taugroupstd) taugroup <- taugroupstd
   } else if (priorGroup@priorDistr=='groupiMOM') {
     priorgr= as.integer(11)
   } else if (priorGroup@priorDistr=='groupeMOM') {
     priorgr= as.integer(12)
   } else if (priorGroup@priorDistr=='groupzellner') {
     priorgr= as.integer(13)
+    if (has_taugroupstd) taugroup <- taugroupstd * n
   } else {
     stop('Prior in priorGroup not recognized')
   }
-  tau <- as.double(priorCoef@priorPars['tau'])
-  taugroup <- as.double(priorGroup@priorPars['tau'])
   alpha <- as.double(priorVar@priorPars['alpha']); lambda <- as.double(priorVar@priorPars['lambda'])
   #
   if ('msPriorSpec' %in% class(priorSkew)) {
@@ -772,15 +951,30 @@ formatmsPriorsMarg <- function(priorCoef, priorGroup, priorVar, priorSkew) {
       taualpha <- 0.358
       fixatanhalpha <- as.double(priorSkew)
   }
-    ans= list(r=r,prior=prior,priorgr=priorgr,tau=tau,taugroup=taugroup,alpha=alpha,lambda=lambda,taualpha=taualpha,fixatanhalpha=fixatanhalpha)
+  if (has_taustd) priorCoef@priorPars['tau']= tau
+  if (has_taugroupstd) priorGroup@priorPars['tau']= taugroup
+  ans= list(r=r,prior=prior,priorgr=priorgr,tau=tau,taugroup=taugroup,alpha=alpha,lambda=lambda,taualpha=taualpha,fixatanhalpha=fixatanhalpha,priorCoef=priorCoef,priorGroup=priorGroup)
   return(ans)
 }
 
+defaultpriorConstraints <- function(priorDelta, priorConstraints) {
+  if (missing(priorConstraints)) {
+    if ((priorDelta@priorDistr=='binomial') && ('p' %in% names(priorDelta@priorPars)) && (length(priorDelta@priorPars[['p']]) > 1)) {
+      priorConstraints <- modelbinomprior(p=0.5)
+    } else {
+      priorConstraints <- priorDelta
+    }
+  }
+  return(priorConstraints)
+}
+
 #Routine to format modelSelection prior distribution parameters in model space
-#Input: priorDelta, priorConstraints
+#Input: priorDelta, priorConstraints, constraints
 #Output: model space prior (prDelta, prDeltap, parprDeltap) and constraints (prConstr,prConstrp,parprConstrp)
-formatmsPriorsModel <- function(priorDelta, priorConstraints) {
+formatmsPriorsModel <- function(priorDelta, priorConstraints, constraints) {
   #Prior on model space (parameters not subject to hierarchical constraints)
+  n_unconstrained <- sum(sapply(constraints, function(x) length(x) == 0))
+  n_constrained <- length(constraints) - n_unconstrained
   if (priorDelta@priorDistr=='uniform') {
     prDelta <- as.integer(0)
     prDeltap <- as.double(0)
@@ -788,9 +982,10 @@ formatmsPriorsModel <- function(priorDelta, priorConstraints) {
   } else if (priorDelta@priorDistr=='binomial') {
     if ('p' %in% names(priorDelta@priorPars)) {
       prDelta <- as.integer(1)
-      prDeltap <- as.double(priorDelta@priorPars['p'])
-      if ((prDeltap<=0) | (prDeltap>=1)) stop("p must be between 0 and 1 for priorDelta@priorDistr=='binomial'")
-      parprDeltap <- double(2)
+      prDeltap <- as.double(priorDelta@priorPars[['p']])
+      if (any(prDeltap<=0) | any(prDeltap>=1)) stop("p must be between 0 and 1 for priorDelta@priorDistr=='binomial'")
+      if ((length(prDeltap) != 1) & (length(prDeltap) != n_unconstrained)) stop("p in priorDelta must be a scalar or have length=number of unconstrained variables")
+      parprDeltap <- as.double(length(prDeltap))
     } else {
       prDelta <- as.integer(2)
       prDeltap <- as.double(.5)
@@ -812,9 +1007,10 @@ formatmsPriorsModel <- function(priorDelta, priorConstraints) {
   } else if (priorConstraints@priorDistr=='binomial') {
     if ('p' %in% names(priorConstraints@priorPars)) {
       prConstr <- as.integer(1)
-      prConstrp <- as.double(priorConstraints@priorPars['p'])
-      if ((prConstrp<=0) | (prConstrp>=1)) stop("p must be between 0 and 1 for priorConstraints@priorDistr=='binomial'")
-      parprConstrp <- double(2)
+      prConstrp <- as.double(priorConstraints@priorPars[['p']])
+      if (any(prConstrp<=0) | any(prConstrp>=1)) stop("p must be between 0 and 1 for priorConstraints@priorDistr=='binomial'")
+      if ((length(prConstrp) != 1) & (length(prConstrp) != n_constrained)) stop("p in priorConstraints must be a scalar or have length=number of constrained variables")
+      parprConstrp <- as.double(length(prConstrp))
     } else {
       prConstr <- as.integer(2)
       prConstrp <- as.double(.5)
@@ -832,6 +1028,33 @@ formatmsPriorsModel <- function(priorDelta, priorConstraints) {
   ans= list(prDelta=prDelta,prDeltap=prDeltap,parprDeltap=parprDeltap,prConstr=prConstr,prConstrp=prConstrp,parprConstrp=parprConstrp)
   return(ans)
 }
+
+
+#Assign a numerical code to the family of likelihoods, to pass on to C
+formatFamily= function(family, issurvival) {
+    
+    if (family=='auto') {
+        familyint= 0; familygreedy=1
+    } else if (family=='normal') {
+        familyint= familygreedy= ifelse(!issurvival,1,11)
+    } else if (family=='twopiecenormal') {
+        familyint= 2; familygreedy=1
+    } else if (family=='laplace') {
+        familyint= 3; familygreedy=1
+    } else if (family=='twopiecelaplace') {
+        familyint= 4; familygreedy=1
+    } else if (family %in% c('binomial','binomial logit')) {
+        familyint= familygreedy= 21
+    } else if (family %in% c('poisson','poisson log')) {
+        familyint= familygreedy= 22
+    } else stop("family not available")
+
+    ans= list(familyint= as.integer(familyint), familygreedy= as.integer(familygreedy))
+    return(ans)
+      
+}
+
+
 
 greedymodelSelectionR <- function(y, x, niter=100, marginalFunction, priorFunction, betaBinPrior, deltaini=rep(FALSE,ncol(x)), verbose=TRUE, ...) {
   #Greedy version of modelSelectionR where variables with prob>0.5 at current iteration are included deterministically (prob<.5 excluded)
@@ -946,7 +1169,7 @@ nselConstraints= function(sel, groups, constraints) {
     violateConstraint= FALSE
     if (ngroupsconstr>0) { for (i in which(hasconstraint)) { if (selgroup[i] & any(!selgroup[constraints[[i]]])) violateConstraint= TRUE } }
     ngroups0= sum(selgroup[!hasconstraint]); ngroups1= sum(selgroup[hasconstraint])
-    return(list(ngroups0=ngroups0, ngroups1=ngroups1, ngroups=ngroups, ngroupsconstr=ngroupsconstr, violateConstraint=violateConstraint))
+    return(list(ngroups0=ngroups0, ngroups1=ngroups1, ngroups=ngroups, ngroupsconstr=ngroupsconstr, violateConstraint=violateConstraint, hasconstraint=hasconstraint))
 }
 
 #binomPrior <- function(sel, prob=.5, logscale=TRUE) {  dbinom(x=sum(sel),size=length(sel),prob=prob,log=logscale) }
@@ -954,8 +1177,9 @@ nselConstraints= function(sel, groups, constraints) {
 binomPrior <- function(sel, prob=.5, logscale=TRUE, probconstr=prob, groups=1:length(sel), constraints=lapply(1:length(unique(groups)), function(z) integer(0))) {
     nsel= nselConstraints(sel=sel, groups=groups, constraints=constraints)
     if (!nsel$violateConstraint) {
-        ans= dbinom(x=nsel$ngroups0,size=nsel$ngroups-nsel$ngroupsconstr,prob=prob,log=TRUE) - lchoose(nsel$ngroups-nsel$ngroupsconstr, nsel$ngroups0)
-        if (nsel$ngroupsconstr>0) ans= ans+ dbinom(x=nsel$ngroups1,size=nsel$ngroupsconstr,prob=probconstr,log=TRUE) - lchoose(nsel$ngroupsconstr, nsel$ngroups1)
+      hasconstraint <- nsel$hasconstraint
+      ans <- sum((log(prob) * sel)[!hasconstraint]) + sum((log(1-prob)*(1-sel))[!hasconstraint])
+      if (nsel$ngroupsconstr>0) ans= ans+ sum((log(probconstr) * sel)[hasconstraint]) + sum((log(1-probconstr)*(1-sel))[hasconstraint])
     } else { ans= -Inf }
     if (!logscale) ans= exp(ans)
     return(ans)

@@ -23,11 +23,12 @@ enumerate, includevars=rep(FALSE,ncol(x)),
 maxvars, niter=5000, thinning=1,
 burnin=round(niter/10), family='normal', priorCoef,
 priorGroup, priorDelta=modelbbprior(1,1),
-priorConstraints=priorDelta,
+priorConstraints,
 priorVar=igprior(.01,.01),
 priorSkew=momprior(tau=0.348), phi, deltaini=rep(FALSE,ncol(x)),
-initSearch='greedy', method='auto', hess='asymp', optimMethod='CDA',
-B=10^5, XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE)
+initSearch='greedy', method='auto', adj.overdisp='intercept',
+hess='asymp', optimMethod, B=10^5,
+XtXprecomp= ifelse(ncol(x)<10^4,TRUE,FALSE), verbose=TRUE)
 
 modelsearchBlockDiag(y, x, priorCoef=momprior(tau=0.348),
 priorDelta=modelbbprior(1,1), priorVar=igprior(0.01,0.01),
@@ -75,9 +76,13 @@ not performed for these variables}
 \item{thinning}{MCMC thinning factor, i.e. only one out of each \code{thinning} iterations are reported. Defaults to thinning=1, i.e. no thinning}
 \item{burnin}{Number of burn-in MCMC iterations. Defaults to
   \code{.1*niter}. Set to 0 for no burn-in}
-\item{family}{Residual distribution. Possible values are
-  'normal','twopiecenormal','laplace', 'twopiecelaplace', or 'auto'. For
-  the latter the residual distribution is inferred from the data.
+\item{family}{Family of parametric distribution. Possible values are
+  'normal' for Normal errors, 'twopiecenormal' for two-piece Normal,
+  'laplace' for Laplace errors, 'twopiecelaplace' for double
+  exponential,
+  'binomial' for logistic regression, 'poisson' for Poisson regression.
+  For 'auto' the error distribution is inferred from the data among
+  'normal', 'laplace', 'twopiecenormal' and 'twopiecelaplace'.
   'laplace' corresponds to median regression and 'twopiecelaplace'
   to quantile regression. See argument \code{priorSkew}}
 \item{priorCoef}{Prior on coefficients, created
@@ -105,22 +110,37 @@ not performed for these variables}
   For \code{family=='twopiecelaplace'} setting alpha=a is equivalent
   to performing quantile regression for the quantile (1+a)/2.
   Ignored if \code{family} is 'normal' or 'laplace'.}
-\item{phi}{Residual variance. Typically this is unknown and therefore left missing. If specified argument priorVar is ignored}
-\item{deltaini}{Logical vector of length \code{ncol(x)} indicating which coefficients should be initialized to be non-zero. Defaults to all variables being excluded from the model}
-\item{initSearch}{Algorithm to refine \code{deltaini}. \code{initSearch=='greedy'} uses a greedy Gibbs sampling search. \code{initSearch=='SCAD'} sets \code{deltaini} to the non-zero elements in a SCAD fit with cross-validated regularization parameter. \code{initSearch=='none'} leaves \code{deltaini} unmodified}
-\item{method}{Method to compute marginal likelihood. The default is to
-  used closed-form expressions whenever possible (only available for
-  pMOM priors with up to 15 covariates) and Laplace approximations otherwise.
-  \code{method=='Laplace'} for Laplace approx, \code{method=='plugin'}
-  for BIC-type approximation,
+\item{phi}{The error variance in Gaussian models, typically this is
+  unknown and is left missing}
+\item{deltaini}{Logical vector of length \code{ncol(x)} indicating which
+  coefficients should be initialized to be non-zero.
+  Defaults to all variables being excluded from the model}
+\item{initSearch}{Algorithm to refine
+  \code{deltaini}. \code{initSearch=='greedy'} uses a greedy Gibbs
+  sampling search. \code{initSearch=='SCAD'} sets \code{deltaini} to the
+  non-zero elements in a SCAD fit with cross-validated regularization
+  parameter. \code{initSearch=='none'} leaves \code{deltaini} unmodified}
+\item{method}{Method to compute marginal likelihood.
+  \code{method=='Laplace'} for Laplace approx, \code{method=='ALA'}
+  for approximate Laplace approximation.
   \code{method=='MC'} for Importance Sampling, \code{method=='Hybrid'}
   for Hybrid Laplace-IS (only available for piMOM prior). See Details.}
+  \code{method=='auto'} attempts to use exact calculations when
+  possible, otherwise ALA if available, otherwise Laplace approx.
+\item{adj.overdisp}{Only used when method=='ALA'. Over-dispersion
+  adjustment in models with fixed dispersion parameter, as in logistic
+  and Poisson regression. adj.overdisp='none' for no adjustment (not
+  recommended, particularly for Poisson
+  models). adj.overdisp='intercept' to estimate over-dispersion from the
+  intercept-only model, and adj.overdisp='residuals' from the Pearson
+  residuals of each model}
 \item{hess}{Method to estimat the hessian in the Laplace approximation to the integrated
   likelihood under Laplace or asymmetric Laplace errors. When
   hess=='asymp' the asymptotic hessian is used, hess=='asympDiagAdj' a
   diagonal adjustment is applied (see Rossell and Rubio for details).}
 \item{optimMethod}{Algorithm to maximize objective function when
-  method=='Laplace' or method=='MC'. optimMethod=='LMA' uses modified
+  method=='Laplace'. Leave unspecified or set optimMethod=='auto' for an
+  automatic choice. optimMethod=='LMA' uses modified
   Newton-Raphson algorithm, 'CDA' coordinate descent algorithm}
 \item{B}{Number of samples to use in Importance Sampling scheme. Ignored
   if \code{method=='Laplace'}}

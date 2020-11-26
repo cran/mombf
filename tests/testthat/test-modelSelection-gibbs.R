@@ -62,7 +62,7 @@ patrick::with_parameters_test_that(
     imom_laplace=list(family="laplace", pCoef=imomprior(tau=0.348)),
     imom_twopiecelaplace=list(family="twopiecelaplace", pCoef=imomprior(tau=0.348)),
     emom_normal=list(family="normal", pCoef=emomprior(tau=0.348)),
-    emom_twopiecenormal=list(family="twopiecenormal", pCoef=emomprior(tau=0.348)),
+#    emom_twopiecenormal=list(family="twopiecenormal", pCoef=emomprior(tau=0.348)),
     emom_laplace=list(family="laplace", pCoef=emomprior(tau=0.348)),
     emom_twopiecelaplace=list(family="twopiecelaplace", pCoef=emomprior(tau=0.348))
   )
@@ -94,13 +94,25 @@ test_that(
     pDelta <- modelbbprior(1,1)
     log <- capture.output(
       fit <- modelSelection(
-        y6~X6[,2]+X6[,3]+X6[,4]+X6[,5]+X6[,6]+X6[,7], priorCoef=pCoef,
-        priorDelta=pDelta, enumerate=FALSE, smoothterms=X6[,2:7],
-        family="normal", priorSkew=pCoef, priorGroup=pCoef
+        y6~X6[,2:7], priorCoef=pCoef, priorDelta=pDelta, enumerate=FALSE,
+        smoothterms= ~ X6[,2:7], family="normal", priorSkew=pCoef, priorGroup=pCoef
       )
     )
     pprobs <- postProb(fit)
     expect_equal(names(pprobs)[3], "pp")
+
     #expect_true(any(pprobs$modelid[1:5] == "3,4,6,7"))
+  }
+)
+
+test_that(
+  "modelSelection with includevars works", {
+    log <- capture.output(
+      fit <- modelSelection(
+        y9, X9, enumerate=FALSE, includevars=c(rep(TRUE, 3), rep(FALSE, 7))
+      )
+    )
+    models <- postProb(fit)$modelid
+    expect_true(all(grepl("1,2,3", models)))
   }
 )
