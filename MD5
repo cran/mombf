@@ -1,5 +1,5 @@
-161b398e898a38841fbf449da50957a2 *ChangeLog
-f10cf75d3416382e430c7d4ce088d393 *DESCRIPTION
+8d4197f56fed77d760bc18aec30ebe6a *ChangeLog
+2aa99f389fb6c9800c3d2527260f71a9 *DESCRIPTION
 b234ee4d69f5fce4486a80fdaf4a4263 *LICENSE
 0add351b34a66e59765ea39c0d69c536 *NAMESPACE
 47c96be13b5c13650d21fab6b89930a8 *R/AllClasses.R
@@ -14,7 +14,7 @@ d8f8bc42bfe89917673d899cb6db1665 *R/dmom.R
 10bd3d1dfee02a49a09f3fdb6a553134 *R/emomLM.R
 ecaa2119ce4101e551f22b2723b93a75 *R/gam.R
 e15247678053fbb7349083372e1184db *R/greedyGLM.R
-68da33dc31bac40b086865287e79a5a1 *R/modelSelection.R
+1cf60e4f6505cea772016999d27945d2 *R/modelSelection.R
 1e27f1e37c48a7c0a91fbcc4af8d6e50 *R/modelSelectionGLM.R
 559ef7f1b354fbcbc9406ca0bbe5df2e *R/modelsearch.R
 e529c62df8aa673f6657c23f16013d3c *R/mombf.R
@@ -35,7 +35,7 @@ df11b79b62d9d64062b7d96652445429 *README.md
 f1674cd735ef0d07d9d0a3f647d8e778 *data/hald.rda
 c29fafb1eefe258aff52ead6997db62d *inst/doc/mombf.R
 fc5716060a3eb9b81418f85c5b2614fa *inst/doc/mombf.Rnw
-c79f415191268b8d009a88197e4d0956 *inst/doc/mombf.pdf
+6418e0a20678111dfa0bd7d9696a3912 *inst/doc/mombf.pdf
 1033d8144ac734695b4acf89d47172ba *man/bbPrior.Rd
 3b95a46adc2af4430a125fa6cda6887a *man/bfnormmix.Rd
 558d6336d31d225fdf47f30cf81f27f7 *man/dalapl.Rd
@@ -73,14 +73,14 @@ d7526776afeaa8faa02e59dfc1f55ffa *src/covariancemat.cpp
 6d58f3e9cb553b1abb0bc8953d5af76c *src/cstat.cpp
 d4a36b9a9a96775250f38a78b2f5c4a5 *src/cstat.h
 8e9ee6f41f4d1d1c2da1b52857633b84 *src/do_mombf.h
-c10afe2b9c909fa5b857626796950f91 *src/glm.cpp
+2ed5997dbc0fc7c46f1f6cc776df2002 *src/glm.cpp
 0b55aff23b45a5853cb03dfe0064589a *src/glm.h
 b01e6f9af2b643277944f7476c1dbb5b *src/mixtures.cpp
 bb8af41c6af127ce0d1148183cb088ea *src/mixtures.h
-88ee95c89e6bf5b855bf52c68fa18487 *src/modelSel.cpp
+9045fd8286c0576b2a3e13924e6138b1 *src/modelSel.cpp
 d485a9ca1536078b65f3506000e61225 *src/modelSel.h
-2c6c1cb4549e7ebf2b9d8323630c734d *src/modselFunction.cpp
-7efb7a361e3cce040831c72a552c2f37 *src/modselFunction.h
+1e848a3df05229815bf6a4f17122e69e *src/modselFunction.cpp
+595114edd0d7a82c0e96f10f391fccbe *src/modselFunction.h
 d006bac46c06b181c95da9d8f16a75a6 *src/modselIntegrals.cpp
 561b748c7a818cff456cf2853780ec48 *src/modselIntegrals.h
 66f61f34c763746a8e0dbb25469993c1 *src/nlpMarg.cpp
