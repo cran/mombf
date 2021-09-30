@@ -198,6 +198,34 @@ predict.msfit <- function(object, newdata, data, level=0.95, ...) {
 }
 
 
+getmodelid= function(object) {
+  if (class(object) != 'msfit') stop("Function modelid requires an argument of type msfit")
+  if (!is.null(object$models)) {
+    ans= object$models[,c('modelid','family')]
+  } else {
+    modelid= apply(object$postSample==1, 1, function(z) paste(which(z),collapse=','))
+    if (object$family=='auto') {
+      twopiece <- laplace <- logical(length(modelid))
+      twopiece[grep(as.character(object$p+1),modelid)] <- TRUE
+      laplace[grep(as.character(object$p+2),modelid)] <- TRUE
+      family <- character(length(modelid))
+      family[(!twopiece) & (!laplace)] <- 'normal'
+      family[twopiece & (!laplace)] <- 'twopiecenormal'
+      family[(!twopiece) & laplace] <- 'laplace'
+      family[twopiece & laplace] <- 'twopiecelaplace'
+      modelid <- sub(paste(',',object$p+1,sep=''),'',modelid)
+      modelid <- sub(as.character(object$p+1),'',modelid)  #for null model
+      modelid <- sub(paste(',',object$p+2,sep=''),'',modelid)
+      modelid <- sub(as.character(object$p+2),'',modelid)  #for null model
+    } else {
+      family= object$family
+    }
+    ans= data.frame(modelid=modelid, family=family)
+  }
+  return(ans)
+}
+
+
 
 setMethod("postProb", signature(object='msfit'), function(object, nmax, method='norm') {
 if (!is.null(object$models)) {
@@ -311,7 +339,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
   splineDegree <- tmp$splineDegree
   if (!is.null(tmp$groups)) groups <- tmp$groups
   if (length(groups) != ncol(x)) stop(paste("groups has the wrong length. It should have length",ncol(x)))
-  hasgroups <- tmp$hasgroups
+  hasgroups <- tmp$hasgroups; isgroups <- tmp$isgroups
   if (!is.null(tmp$constraints)) constraints <- tmp$constraints
   outcometype <- tmp$outcometype; uncens <- tmp$uncens; ordery <- tmp$ordery
   typeofvar <- tmp$typeofvar
@@ -519,6 +547,8 @@ formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
   if (nrow(x)!=length(y)) stop('nrow(x) must be equal to length(y)')
   if (any(is.na(y))) stop('y contains NAs, this is currently not supported, please remove the NAs')
   hasgroups <-  (length(groups) > length(unique(groups)))
+  ningroup <- table(groups)
+  isgroup <- (groups %in% as.numeric(names(ningroup)[ningroup>1]))
   y <- as.double(y)
   #Check that support of y is valid for the specified family
   if (family %in% c('binomial','binomial logit')) {
@@ -528,7 +558,7 @@ formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
   }
   ans <- list(
     x=x, y=y, formula=formula, is_formula=is_formula, splineDegree=splineDegree,
-    groups=groups, hasgroups=hasgroups, constraints=constraints, outcometype=outcometype, uncens=uncens,
+    groups=groups, hasgroups=hasgroups, isgroup=isgroup, constraints=constraints, outcometype=outcometype, uncens=uncens,
     ordery=ordery, typeofvar=typeofvar
   )
   return(ans)

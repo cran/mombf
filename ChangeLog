@@ -1,3 +1,10 @@
+CHANGES IN VERSION 3.0.6
+- Added posterior sampling under Normal approximation for GLMs, in the
+presence of groups
+
+CHANGES IN VERSION 3.0.5
+- Added getBIC and getEBIC methods
+
 CHANGES IN VERSION 3.0.4
 - Added bicprior() to modelSelection
 - Fixed memory error in pmomLM Rd examples file

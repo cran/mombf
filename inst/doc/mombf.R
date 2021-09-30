@@ -10,7 +10,7 @@ theta <- matrix(c(1,1,0),ncol=1)
 y <- x %*% theta + rnorm(100)
 
 #Default MOM prior on parameters
-priorCoef <- momprior(tau=0.348)
+priorCoef <- momprior(taustd=1)
 
 #Beta-Binomial prior for model space
 priorDelta <- modelbbprior(1,1)
@@ -324,66 +324,7 @@ paste('X',which(th!=0),sep=''), pos=3)
 
 
 ###################################################
-### code chunk number 25: six
-###################################################
-set.seed(4*2*2008)
-n <- 50; theta <- c(log(2),0)
-x <- matrix(NA,nrow=n,ncol=2)
-x[,1] <- rnorm(n,0,1); x[,2] <- rnorm(n,.5*x[,1],1)
-p <- pnorm(x %*% matrix(theta,ncol=1))
-y <- rbinom(n,1,p)
-
-
-###################################################
-### code chunk number 26: pmomLM
-###################################################
-th <- pmomLM(y=y,x=x,xadj=rep(1,n),niter=10000)
-head(th$postModel)
-table(apply(th$postModel,1,paste,collapse=','))
-
-
-###################################################
-### code chunk number 27: seven
-###################################################
-glm1 <- glm(y~x[,1]+x[,2],family=binomial(link = "probit"))
-thetahat <- coef(glm1)
-V <- summary(glm1)$cov.scaled
-g <- .5
-bfmom.1 <- momknown(thetahat[2],V[2,2],n=n,g=g,sigma=1)
-bfimom.1 <- imomknown(thetahat[2],V[2,2],n=n,nuisance.theta=2,g=g,sigma=1)
-bfmom.1
-bfimom.1
-
-
-###################################################
-### code chunk number 28: nine
-###################################################
-bfmom.2 <- momknown(thetahat[3],V[3,3],n=n,g=g,sigma=1)
-bfimom.2 <- imomknown(thetahat[3],V[3,3],n=n,nuisance.theta=2,g=g,sigma=1)
-bfmom.2
-bfimom.2
-
-
-###################################################
-### code chunk number 29: ten
-###################################################
-bfmom.0 <- momknown(thetahat[2:3],V[2:3,2:3],n=n,g=g,sigma=1)
-bfimom.0 <- imomknown(thetahat[2:3],V[2:3,2:3],n=n,nuisance.theta=2,g=g,sigma=1)
-bfmom.0
-bfimom.0
-
-
-###################################################
-### code chunk number 30: eleven
-###################################################
-prior.prob <- rep(1/4,4)
-bf <- c(bfmom.0,bfmom.1,bfmom.2,1)
-pos.prob <- prior.prob*bf/sum(prior.prob*bf)
-pos.prob
-
-
-###################################################
-### code chunk number 31: mixtures1
+### code chunk number 25: mixtures1
 ###################################################
 set.seed(1)
 n=200; k=1:3
@@ -391,14 +332,14 @@ x= rnorm(n)
 
 
 ###################################################
-### code chunk number 32: mixtures2
+### code chunk number 26: mixtures2
 ###################################################
 fit= bfnormmix(x=x,k=k,q=3,q.niw=1,B=10^4)
 postProb(fit)
 
 
 ###################################################
-### code chunk number 33: mixturesNIW
+### code chunk number 27: mixturesNIW
 ###################################################
 mcmcout= postSamples(fit)
 names(mcmcout)
@@ -411,7 +352,7 @@ parest[[2]]
 
 
 ###################################################
-### code chunk number 34: mixturesMOMIW
+### code chunk number 28: mixturesMOMIW
 ###################################################
 w= postSamples(fit)[[2]]$momiw.weight
 apply(mcmcout[[2]]$eta, 2, weighted.mean, w=w)
@@ -419,7 +360,7 @@ apply(mcmcout[[2]]$mu, 2, weighted.mean, w=w)
 
 
 ###################################################
-### code chunk number 35: mixture2comp
+### code chunk number 29: mixture2comp
 ###################################################
 set.seed(1)
 n=200; k=1:3; probs= c(1/2,1/2)

@@ -43,6 +43,15 @@ if (!isGeneric("demom")) {
 }
 
 
+if (!isGeneric("getBIC")) {
+  setGeneric("getBIC", function(object) standardGeneric("getBIC"))
+}
+
+if (!isGeneric("getEBIC")) {
+  setGeneric("getEBIC", function(object) standardGeneric("getEBIC"))
+}
+
+
 if (!isGeneric("marginalIW")) {
   setGeneric("marginalNIW", function(x, xbar, samplecov, n, z, g,  mu0=rep(0,ncol(x)), nu0=ncol(x)+4, S0,logscale=TRUE) standardGeneric("marginalNIW"))
 }
@@ -60,6 +69,6 @@ if (!isGeneric("postSamples")) {
 
 
 if (!isGeneric("rnlp")) {
-  setGeneric("rnlp", function(y, x, m, V, msfit, outcometype, family, priorCoef, priorGroup, priorVar, niter=10^3, burnin=round(niter/10), thinning=1, pp='norm') standardGeneric("rnlp"))
+  setGeneric("rnlp", function(y, x, m, V, msfit, outcometype, family, priorCoef, priorGroup, priorVar, isgroup, niter=10^3, burnin=round(niter/10), thinning=1, pp='norm') standardGeneric("rnlp"))
 }
 
