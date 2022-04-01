@@ -1,3 +1,18 @@
+CHANGES IN VERSION 3.1.3
+- Fixed NOTE from comparing class() to string in cil.R
+
+CHANGES IN version 3.1.2
+- Added cil
+- Fixed gcc warnings for comparison of pointer addition to NULL
+
+CHANGES IN VERSION 3.1.1
+- Added bicprior to linear models
+
+CHANGES IN VERSION 3.1.0
+- Fixed modelSelection to work with GLMs with bicprior() and group constraints
+- Added initpar option to modelSelection with 'MLE', 'MLE-aisgd', 'L1',
+'L2-aisgd' to improve ALA accuracy and increase speed of Laplace approx
+
 CHANGES IN VERSION 3.0.7
 - Fixed bug in predict.msfit where covariates in newdata were not scaled appropriately
 
