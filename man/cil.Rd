@@ -21,10 +21,12 @@
   object class.
 }
 \usage{
-cil(y, D, X, I = NULL, R = 1e4, th.search = 'EB', mod1 = 'lasso_bic',
-  th.prior = 'unif', beta.prior = 'nlp', rho.min = NULL, rho.max = NULL,
-  th.range = NULL, tau = 0.348, max.mod = Inf, lpen = 'lambda.1se',
-  eps = 1e-10, bvs.fit0 = NULL, th.EP = NULL)
+cil(y, D, X, I = NULL, family = 'normal', familyD = 'normal',
+  R = 1e4, Rinit = 500, th.search = 'EB', mod1 = 'lasso_bic',
+  th.prior = 'unif', priorCoef, rho.min = NULL,
+  th.range = NULL, max.mod = 2^20, lpen = 'lambda.1se',
+  eps = 1e-10, bvs.fit0 = NULL, th.EP = NULL, center = TRUE, scale =
+  TRUE, includevars, verbose = TRUE)
 }
 \arguments{
 \item{y}{one-column matrix containing the observed responses. The response must
@@ -37,9 +39,15 @@ cil(y, D, X, I = NULL, R = 1e4, th.search = 'EB', mod1 = 'lasso_bic',
 \item{I}{matrix with the desired interaction terms between \code{D} and
   \code{X}. If not informed, i.e. supplied as the default \code{NULL}, this term
   will not be included into the response model}
-\item{R}{integer scalar indicating the number of Gibbs sampling iterations to be
+\item{family}{Distribution of the outcome, e.g. 'normal', 'binomial' or
+  'poisson'. See \code{help}(modelSelection) for a full list of options}
+\item{familyD}{Distribution of the treatment(s). Only 'normal' or
+  'binomial' currently allowed}
+\item{R}{Number of MCMC iterations to be
   run by \code{modelSelection} on each stage of CIL (see argument \code{niter}
   therein)}
+\item{Rinit}{MCMC iterations to estimate marginal posterior
+  inclusion probabilities under a uniform model prior, needed for EP}
 \item{th.search}{method to estimate theta values in the marginal prior inclusion
   probabilities of the CIL model. Options are: \code{EB} (Empirical Bayes, based
   on maximum marginal likelihood) and \code{EP} (Expectation propagation
@@ -51,26 +59,19 @@ cil(y, D, X, I = NULL, R = 1e4, th.search = 'EB', mod1 = 'lasso_bic',
 \item{th.prior}{prior associated to the thetas for the Empirical Bayes
   estimation. Currently only \code{unif} (Uniform prior) is supported,
   effectively making the EB approach the maximisation of the marginal likelihood}
-\item{beta.prior}{prior on the response model parameters, for both treatments
-  and covariates, used to compute posterior model probabilities and BMA
-  estimates of the CIL model. Options are: \code{nlp} (pMOM non-local prior, by
-  default, see also \code{tau} argument) and \code{zup} (Zellner's prior with
-  \eqn{\tau = n}, equivalent to the Unit Information prior)}
+\item{priorCoef}{Prior on the response model parameters, see \code{modelSelection}}
 \item{rho.min}{value of \eqn{\rho} in (0, 1/2) employed in the prior probability
   model of CIL. If left uninformed, i.e. supplied as the default \code{NULL},
   it will be set to \eqn{1/p^2}, where p is the dimension of the response model.}
-\item{rho.max}{this argument is deprecated and should not be informed.}
 \item{th.range}{sequence of values to be considered in the grid when searching
   for points to initialise the search for the optimal theta parameters. If left
   uninformed, the function will determine a computationally suitable grid
   depending on the number of parameters to be estimated}
-\item{tau}{scalar hyper-parameter supplied to the non-local prior (see argument
-  \code{beta.prior}). Set to 0.348 by default}
-\item{max.mod}{maximum number of models considered when computing the marginal
-  quantities required to find the optimal values for theta. By default, this
-  argument is equal to \code{Inf} (i.e. all visited models by the Gibbs sampler
-  are considered), but it might be computationally desirable to restrict this
-  number when the dimensionality of \code{D} and/or \code{X} is very large}
+\item{max.mod}{Maximum number of models considered when computing the marginal
+  likelihood required by empirical Bayes.
+  If set to \code{Inf} all visited models by the enumeration/MCMC
+  are considered, but it might be computationally desirable to restrict this
+  number when the dimension of \code{D} and/or \code{X} is large}
 \item{lpen}{penalty type supplied to \code{glmnet} if \code{mod1} is set to
   \code{lasso}. Default is \code{lambda.1se} (see documentation corresponding to
   \code{glmnet} for options on how to set this parameter)}
@@ -88,7 +89,16 @@ cil(y, D, X, I = NULL, R = 1e4, th.search = 'EB', mod1 = 'lasso_bic',
   a second computation the model on the same data where \code{th.search}
   has ben changed to \code{EB}, in order to save the cost of the EP search
   to initialise the optimisation algorithm. To use this argument, supply the
-  object residing int the slot \code{th.hat} of a \code{cilfit}-class object.}
+  object residing int the slot \code{th.hat} of a \code{cilfit}-class
+  object.}
+\item{center}{If \code{TRUE}, \code{y} and \code{x} are centered to have
+  zero mean. Dummy variables corresponding to factors are NOT centered}
+\item{scale}{If \code{TRUE}, \code{y} and columns in \code{x} are
+  scaled to have variance=1. Dummy variables corresponding to factors are NOT scaled}
+\item{includevars}{Logical vector of length ncol(x) indicating variables
+that should always be included in the model, i.e. variable selection is
+not performed for these variables}
+\item{verbose}{Set \code{verbose==TRUE} to print iteration progress}
 }
 \details{
   We estimate treatment effects for the features present in the treatment
@@ -109,19 +119,18 @@ cil(y, D, X, I = NULL, R = 1e4, th.search = 'EB', mod1 = 'lasso_bic',
   See references for further details on implementation and computation.
 }
 \value{
-Object of class \code{cilfit}, which extends a list with elements
-\item{cil.teff}{\code{numeric} vector containing the BMA point estimates
-  for the treatment effects featured in \code{D}}
-\item{cil.teff.postdist}{\code{numeric} vector featuring
-  quantiles of the posterior distribution for each of the
-  treatment effects, obtained via Gibbs sampling}
-\item{cil.bma.mcmc}{\code{numeric} vector containing the BMA point estimate
-  at each MCMC run on the model search Gibbs sampler
-}
+  Object of class \code{cilfit}, which extends a list with elements
+\item{cil.teff}{BMA estimates, 0.95 intervals and posterior inclusion
+  probabilities for treatment effects in \code{D}}
+\item{coef}{BMA inference for treatment effects and all other covariates}
 \item{model.postprobs}{\code{matrix} returning the posterior model probabilities
   computed in the CIL model}
-\item{marg.postprobs}{\code{numeric} vector containing the estimated marginal
+\item{margpp}{\code{numeric} vector containing the estimated marginal
   posterior inclusion probabilities of the featured treatments and controls}
+\item{margprior}{Marginal prior inclusion probabilities, as estimated by
+  CIL}
+\item{margpp.unif}{Marginal posterior inclusion probabilities that would
+  be obtained under a uniform model prior}
 \item{theta.hat}{Values used for the hyper-parameter theta, estimated according
   to the argument \code{th.search} specified}
 \item{treat.coefs}{Estimated weights of the effect of the control variables
@@ -164,11 +173,16 @@ y <- d * alpha + X \%*\% beta_y + rnorm(100)
 # Confounder Importance Learning
 fit1 <- cil(y = y, D = d, X = X, th.search = 'EP')
 
-# Posterior model probabilities (comparison)
-postProb(fit1, nmax = 5)
-
-# Treatment effects
+# BMA for treatment effects
 coef(fit1)
+
+# BMA for all covariates
+head(fit1$coef)
+
+# Estimated prior inclusion prob
+# vs. treatment regression coefficients
+plotprior(fit1)
+
 }
 
 % Add one or more standard keywords, see file 'KEYWORDS' in the

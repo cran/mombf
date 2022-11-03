@@ -462,6 +462,7 @@ modelSelection <- function(y, x, data, smoothterms, nknots=9, groups=1:ncol(x), 
     ans <- .Call("modelSelectionGibbsCI", postMode,postModeProb,knownphi,familyint,prior,priorgr,niter,thinning,burnin,ndeltaini,deltaini,includevars,n,p,ystd,uncens,sumy2,sumy,sumlogyfact,as.double(xstd),colsumsx,hasXtX,XtX,ytX,method,adj.overdisp,hesstype,optimMethod,optim_maxit,thinit,usethinit,B,alpha,lambda,phi,tau,taugroup,taualpha,fixatanhalpha,r,prDelta,prDeltap,parprDeltap,prConstr,prConstrp,parprConstrp,groups,ngroups,nvaringroup,constraints,invconstraints,as.integer(verbose))
     postSample <- matrix(ans[[1]],ncol=ifelse(familyint!=0,p,p+2))
     margpp <- ans[[2]]; postMode <- ans[[3]]; postModeProb <- ans[[4]]; postProb <- ans[[5]]
+    margpp[includevars==1]= 1
     postmean= postvar= NULL
     modelid= apply(postSample[,1:ncol(xstd),drop=FALSE]==1, 1, function(z) paste(which(z),collapse=','))
 
@@ -1063,7 +1064,7 @@ formatmsPriorsModel <- function(priorDelta, priorConstraints, constraints) {
     if ('p' %in% names(priorDelta@priorPars)) {
       prDelta <- as.integer(1)
       prDeltap <- as.double(priorDelta@priorPars[['p']])
-      if (any(prDeltap<=0) | any(prDeltap>=1)) stop("p must be between 0 and 1 for priorDelta@priorDistr=='binomial'")
+      if (any(prDeltap<=0) | any(prDeltap>1)) stop("For the binomial model prior the inclusion probabilities p must lie in (0,1]")
       if ((length(prDeltap) != 1) & (length(prDeltap) != n_unconstrained)) stop("p in priorDelta must be a scalar or have length=number of unconstrained variables")
       parprDeltap <- as.double(length(prDeltap))
     } else {
