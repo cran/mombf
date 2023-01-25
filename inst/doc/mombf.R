@@ -9,6 +9,11 @@ x <- matrix(rnorm(100*3),nrow=100,ncol=3)
 theta <- matrix(c(1,1,0),ncol=1)
 y <- x %*% theta + rnorm(100)
 
+#BIC for all models
+b= bestBIC(y ~ x[,1]+x[,2]+x[,3]) #recall: lower BIC is better
+b
+b[which.min(b$bic),]
+
 #Default MOM prior on parameters
 priorCoef <- momprior(taustd=1)
 
