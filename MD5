@@ -1,8 +1,8 @@
-a3334bf65429b0480775a45f728f86b7 *ChangeLog
-b5a00843f841ab76c9b964f035ce98c0 *DESCRIPTION
+093848f7fea3ca14c5c6902b7a1ce9d3 *ChangeLog
+3b5b76c079bcb69255cb75d1fe99208a *DESCRIPTION
 b234ee4d69f5fce4486a80fdaf4a4263 *LICENSE
-9564848f8acda1ef1bedb4e2973dc6e8 *NAMESPACE
-b1b67cfbedea4dbd8717abd2dd963ba1 *R/AllClasses.R
+2e49a3dec190e6d9658e09b0ae0447cc *NAMESPACE
+a30ab69329a579231a83e0439c9e6b9f *R/AllClasses.R
 2809c0722368569c603c6e762611bfda *R/AllGenerics.R
 bc3a85729ce7caa0f98b19a4ca3fa555 *R/RcppExports.R
 7a81af8260d0095c593e58ebea439580 *R/alapl.R
@@ -14,7 +14,7 @@ bc3a85729ce7caa0f98b19a4ca3fa555 *R/RcppExports.R
 d8f8bc42bfe89917673d899cb6db1665 *R/dmom.R
 8ac4de7f530a47c2d5f246fde7f6a516 *R/gam.R
 e15247678053fbb7349083372e1184db *R/greedyGLM.R
-9b6ddfcbcddbaa5eb9060d96ddd612cf *R/infocriteria.R
+8602e372d9e90f7d278a57a15f842540 *R/infocriteria.R
 01142a720c6c563502131ba7bf204e42 *R/initParameters.R
 7e5bef562ad699895314f2a6873a46f2 *R/modelSelection.R
 0a622a997f8527e0b4c268b876ee684f *R/modelSelectionGLM.R
@@ -30,11 +30,11 @@ ed339218d7bbf545d8a3d00085b5d00a *R/testfunction.R
 df11b79b62d9d64062b7d96652445429 *README.md
 d75405753ad3907f846df96213518a53 *build/vignette.rds
 68be7e456a62edec004cde3825820314 *data/hald.rda
-7e3a126f8c2983be22c2bd4b78bd3448 *inst/doc/mombf.R
-fccfd2c89d4cfa289361ab7292aa0302 *inst/doc/mombf.Rnw
-ef5ee35244b6b2ddbae8c8554678183e *inst/doc/mombf.pdf
+711fd12ba28953abab255ebc7b14f187 *inst/doc/mombf.R
+8899f9c75794b1a66160278223a4bd3a *inst/doc/mombf.Rnw
+c156cb52740aa051e1074cfe0b1570bd *inst/doc/mombf.pdf
 1033d8144ac734695b4acf89d47172ba *man/bbPrior.Rd
-9481bc8f8607c8e83fb6015ea7620f34 *man/bestBIC.Rd
+68867553e29c8dde00217a7d6a0ff9eb *man/bestBIC.Rd
 3b95a46adc2af4430a125fa6cda6887a *man/bfnormmix.Rd
 613f453143f457fb340e39c9f6c02809 *man/cil.Rd
 558d6336d31d225fdf47f30cf81f27f7 *man/dalapl.Rd
@@ -45,6 +45,7 @@ aedd5e2675fe63e43c99aa821cbaedf1 *man/diwish.Rd
 353dbcc431c3fd65aa590e6659b0f310 *man/eprod.Rd
 15ea1cb26aabaf9bc52c387955db57c3 *man/getBIC.Rd
 160af2a742b048100f80bbb849631835 *man/hald.Rd
+970bf79f93d721796988d86f022195d1 *man/icfit-class.Rd
 a1d8611e8611f30c45eb424358e9b1a3 *man/marginalNIW.Rd
 8f0766eb44165f21e6fb204342e91f66 *man/mixturebf-class.Rd
 f9d4376dd2dced8704e26d328d0f7d6c *man/mode2g.Rd
@@ -59,8 +60,8 @@ bf03bcd13d806c69fa9035035a2eea8d *man/nlpMarginals.Rd
 d80757ea296eea000ea7889c15c381d4 *man/postProb.Rd
 c4f39d0981250a617c73f534656ccdb3 *man/postSamples.Rd
 a7622e97cb52dc2e01d91dcba5796022 *man/rnlp.Rd
-e3d3cb360fbfdb3c6974e14eb5f09870 *src/Makevars
-fdcb2e0c2502ed804ae55e75cf88055c *src/Makevars.win
+daf246d2559a7df53698b1714f020b7a *src/Makevars
+d80543633f2d4563ff1d3124278e5b4e *src/Makevars.win
 bc34cd47a77d2acfc941f8ece0793e7c *src/Polynomial.cpp
 cbcf37dd05473fcdb51321d0783e4d2e *src/Polynomial.h
 d19a966a24dbe490eb128aa604df3237 *src/PolynomialRootFinder.cpp
@@ -93,5 +94,5 @@ ec60c64ca5a985acdadab6827b1b4602 *tests/testthat/test-modelSelection-enum.R
 71a2d96a42fd3d4a20565fff26970cd1 *tests/testthat/test-mspriorspec.R
 a47701662508483457680e0f6ecf853e *tests/testthat/test-nlpMarginal-groups.R
 942e8eb91891475e4fa3a120f962d9e8 *tests/testthat/test-nlpMarginal.R
-fccfd2c89d4cfa289361ab7292aa0302 *vignettes/mombf.Rnw
+8899f9c75794b1a66160278223a4bd3a *vignettes/mombf.Rnw
 17cf54bd4b85ea5d277d5a144eca43a0 *vignettes/references.bib
