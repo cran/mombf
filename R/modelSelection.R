@@ -182,6 +182,7 @@ setMethod("coefOneModel", signature(y='ANY',x='matrix',m='missing',V='missing',o
 
 predict.msfit <- function(object, newdata, data, level=0.95, ...) {
     hasPostSampling(object)
+    if (is.null(colnames(object$xstd))) colnames(object$xstd)= paste('x',1:ncol(object$xstd),sep='')
     th= rnlp(msfit=object,niter=10^4)
     mx= object$stdconstants[-1,'shift']; sx= object$stdconstants[-1,'scale']
     if (!missing(newdata)) {
@@ -200,11 +201,13 @@ predict.msfit <- function(object, newdata, data, level=0.95, ...) {
         }
         #ct= (sx==0)
         #newdata[,!ct]= t((t(newdata[,!ct]) - mx[!ct])/sx[!ct])
+        if (is.null(colnames(newdata))) colnames(newdata)= paste('x',1:ncol(newdata),sep='')
     } else {
         newdata= t(t(object$xstd) * sx + mx)
     }
     sel= colnames(th) %in% colnames(newdata)
     ypred= th[,sel] %*% t(newdata)
+    if ("intercept" %in% colnames(th)[!sel]) ypred= ypred + th[,'intercept']
     ans= cbind(mean=colMeans(ypred), t(apply(ypred,2,quantile,probs=c((1-level)/2,1-(1-level)/2))))
     return(ans)
 }
@@ -237,6 +240,22 @@ getmodelid= function(object) {
   return(ans)
 }
 
+
+
+setMethod("logjoint", signature(object='msfit'), function(object, return_models=TRUE) {
+  if (object$enumerate) {
+      if (return_models) {
+        ans= data.frame(object$models, object$postProb)
+      } else {
+        ans= object$postProb
+      }
+  } else {
+    ans= unique(data.frame(object$postSample==1, logpp=object$postProb))
+    if (!return_models) ans= ans[,ncol(ans)]
+  }
+return(ans)
+}
+)
 
 
 setMethod("postProb", signature(object='msfit'), function(object, nmax, method='norm') {
@@ -280,6 +299,52 @@ if (!is.null(object$models)) {
 return(ans)
 }
 )
+
+
+#Convert text model identifier (e.g. "1,3,4") into logical identifier (e.g. c(TRUE,FALSE,TRUE,TRUE))
+modelid2logical= function(modelid, nvars) {
+  modelid= strsplit(modelid, split=',')
+  ans= matrix(FALSE, nrow=length(modelid), ncol=nvars)
+  for (i in 1:nrow(ans)) {
+      sel= as.numeric(modelid[[i]])
+      ans[i, sel[sel<=nvars]]= TRUE
+  }
+  return(ans)
+}
+
+
+#Obtain posterior probability for subsets of variables indicated in varsubset (the remaining parameters are passed on to postProb)
+# varsubset can take one of the following 4 formats
+# - A logical vector indicating which variables are in the subset and length equal to the number of variables, e.g. c(TRUE, FALSE, TRUE, TRUE)
+# - A logical matrix where each row indicates a subset, as in the previous entry
+# - A numeric vector indicating the indices of the variables in the subset, e.g. c(1,3,4)
+# - A list where each entry is a numeric vector as in the previous entry
+setMethod("postProbSubset", signature(object='msfit'), function(object, varsubset, nmax, method='norm') {
+    if (!is.list(varsubset) & !is.matrix(varsubset)) {
+      if (is.logical(varsubset)) varsubset= matrix(varsubset, nrow=1) else varsubset= list(varsubset)
+    }
+    if (is.matrix(varsubset)) nsubsets= nrow(varsubset) else if (is.list(varsubset)) nsubsets= length(varsubset) else stop("varsubset has the wrong format")
+    modelpp= postProb(object, nmax=nmax, method=method)
+    modelid= modelid2logical(modelpp$modelid, nvars= ncol(object$xstd))
+    colnames(modelid)= colnames(object$xstd)
+    ans= double(nsubsets)
+    if (is.matrix(varsubset)) {
+      for (i in 1:nsubsets) {
+          nselvars= rowSums(modelid[,varsubset[i,],drop=FALSE]) #number of variables in the subset selected by each model
+          selmodel= (nselvars== sum(varsubset[i,]))  #models selecting all variables in the subset
+          ans[i]= sum(modelpp$pp[selmodel])
+      }
+    } else {
+      for (i in 1:nsubsets) {
+          nselvars= rowSums(modelid[,varsubset[[i]],drop=FALSE])    #number of variables in the subset selected by each model
+          selmodel= (nselvars== length(varsubset[[i]]))  #models selecting all variables in the subset
+          ans[i]= sum(modelpp$pp[selmodel])
+      }
+    }
+    return(ans)
+}
+)
+
 
 
 defaultmom= function(outcometype,family) {
@@ -575,6 +640,8 @@ formatInputdata <- function(y,x,data,smoothterms,nknots,family) {
   } else if (family %in% c('poisson','poisson logit')) {
       if (any(y < 0) || any((y %% 1) != 0)) stop("Invalid value for the response. For Poisson regression it must be a natural number")
   }
+  if (any(is.na(y)) | any(is.infinite(y))) stop("y contains NAs or infinite values")
+  if (any(is.na(x)) | any(is.infinite(x))) stop("x contains NAs or infinite values")
   ans <- list(
     x=x, y=y, formula=formula, is_formula=is_formula, splineDegree=splineDegree,
     groups=groups, hasgroups=hasgroups, isgroup=isgroup, constraints=constraints, outcometype=outcometype, uncens=uncens,
