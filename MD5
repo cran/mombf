@@ -1,5 +1,5 @@
-0219b1ec9e2e3dd812231b529bd24562 *ChangeLog
-4dd8f8c7f9f25a8b1b24d9013b34891e *DESCRIPTION
+37a494f62fc43dc7e1c52d5b4edf3448 *ChangeLog
+2642e6cf05b5cce451e4fa764c53fad9 *DESCRIPTION
 b234ee4d69f5fce4486a80fdaf4a4263 *LICENSE
 51a75b8f0f413cc8866385350b9cca63 *NAMESPACE
 f11902a6c6881ae32a3ac8df4e9ed807 *R/AllClasses.R
@@ -16,7 +16,7 @@ d8f8bc42bfe89917673d899cb6db1665 *R/dmom.R
 e15247678053fbb7349083372e1184db *R/greedyGLM.R
 8602e372d9e90f7d278a57a15f842540 *R/infocriteria.R
 01142a720c6c563502131ba7bf204e42 *R/initParameters.R
-b7bfafcf1abce0d83916276d2ee44e2c *R/localnulltest.R
+62e8a643142d1418845349d76e197dbd *R/localnulltest.R
 bfabb07f25575db4d9214882acd2b40c *R/modelSelection.R
 0a622a997f8527e0b4c268b876ee684f *R/modelSelectionGLM.R
 559ef7f1b354fbcbc9406ca0bbe5df2e *R/modelsearch.R
@@ -33,7 +33,7 @@ d75405753ad3907f846df96213518a53 *build/vignette.rds
 68be7e456a62edec004cde3825820314 *data/hald.rda
 711fd12ba28953abab255ebc7b14f187 *inst/doc/mombf.R
 8899f9c75794b1a66160278223a4bd3a *inst/doc/mombf.Rnw
-5ff4497bbea98c872b432cf86c599f4f *inst/doc/mombf.pdf
+e5ac3266ffe8bd117eef3accbcabe33a *inst/doc/mombf.pdf
 1033d8144ac734695b4acf89d47172ba *man/bbPrior.Rd
 68867553e29c8dde00217a7d6a0ff9eb *man/bestBIC.Rd
 3b95a46adc2af4430a125fa6cda6887a *man/bfnormmix.Rd
