@@ -110,39 +110,16 @@ void lmbayes(double *bpost, double *spost, double *b, double **Vb, double *a_s, 
 void lmbayes_knownvar(double *bpost, double *b, double **Vb, double **XtX, double **invXtX, double *Xty, double *sigma, int *B, double *y, double **X, int *n, int *p, int *useXtX, double *mpr, double **Spr_inv, double *tauprior); //same as lmbayes with known variance sigma^2
 
 
-/**************************************************************/
-/* Input/output functions (interface)                         */
-/**************************************************************/
-
-FILE *openIn(const char *filename);
-FILE *openOut(const char *filename);
-
-void writeInt(int);
-void writeLong(long i);
-void writeFloat(float);
-void writeDouble(double);
-
-void writeIntArray(int *, int, int);
-void fwriteIntArray(FILE *, int *, int, int);
-void fwriteIntMatrix(FILE *f, int **x, int rows, int cols);
-void writeIntMatrix(int **x, int rows, int cols);
-void writeDoubleArray(double *, int, int);
-void writeDoubleMatrix2(double **, int , int);
-void fwriteDoubleArray(FILE *, double *, int, int);
-void fwriteDoubleMatrix2(FILE *, double **, int , int);
-void writeDoubleMatrix(double **, int, int);
-void writeFloatArray(float *, int, int);
-void writeArray(float *, int, int);
 
 
 /**************************************************************/
-/* Debug messages etc. (mess)                                 */
+/* Messages and error messages                                */
 /**************************************************************/
 
+void print_iterprogress(int *iter, int *niter, int *everyiter);
 void errorC(const char *module, const char *msg, int nr);
-void err_msg(const char *fct, const char *txt, int n1, int n2, int n3);
-void fserror(const char *proc, const char *act, const char *what);
 void nrerror(const char *proc, const char *act, const char *what);
+
 
 /**************************************************************/
 /* Memory allocation                                          */
@@ -245,6 +222,15 @@ void inv_posdef_upper(double **a, int n, double **aout, bool *posdef); //Same bu
 void invdet_posdef(double **a, int n, double **aout, double *det_a); //Inverse and determinant of positive def matrix
 void inv_posdef_chol(double **invchol, int n, double **aout); //Inverse given cholesky decomposition
 
+void choldcinv_det(arma::mat *Ainv, arma::mat *cholAinv, double *logdet_Ainv, arma::mat *A); //inverse, Cholesky decomp and determinant
+
+//Updating matrix inverses after rank 1 updates
+void symmat_inv_colupdate(arma::mat *Ainv, arma::sp_mat *difvals, int colid); //update symmetric A by changing 1 row/col
+void updateinv_rank1(arma::mat *Ainv, arma::sp_mat *u, arma::sp_mat *v); //A + u v^T
+void updateinv_rank1(arma::mat *Ainv, int rowid, arma::sp_mat *v); //add v to A[,rowid]
+void updateinv_rank1(arma::mat *Ainv, arma::sp_mat *u, int colid); //add u to A[colid,]
+
+
 void ludc(double **a, int n, int *indx, double *d); //LU decomposition (renamed routine ludcmp from NR)
 void lu_solve(double **a, int n, const int *indx, double b[]); //Solve A*x=b (renamed routine lubksb from NR)
 void lu_inverse(double **a, int n, double **aout); //Inverse of A[1..n][1..n]
@@ -269,6 +255,10 @@ void iindexsort(int *x, int *index, int ilo, int ihi, int incr); //like dindexso
 
 void samplei_wr(int *x, int popsize, int n); //sample wo replacement from a vector of integers
 void sampled_wr(double *x, int popsize, int n); //same for vector of doubles
+
+void rbirthdeath(int *index, bool *birth, arma::SpMat<short> *model, double pbirth); //random draw from birth-death proposal
+double dbirthdeath(arma::SpMat<short> *modelnew, arma::SpMat<short> *model, double pbirth, bool logscale); //pmf of birth-death proposal
+
 
 /**************************************************************/
 /* Probability distributions                                  */
@@ -313,6 +303,7 @@ double apnorm(double y, bool logscale); //approx Normal(0,1) cdf
 double apnorm2(double y, bool logscale); //higher-accuracy approx Normal(0,1) cdf
 double rnormC(double mu, double s); //draw from univariate Normal(mu,s^2)
 void rmvnormC(double *y, int n, const double *mu, double **chols); //draw from multivariate Normal
+void rmvnormC(arma::mat *y, arma::mat *mu, arma::mat *chols); //draw from multivariate Normal
 double millsnorm(double z); //Mill's ratio (1-pnorm(z))/dnorm(z)
 double invmillsnorm(double z); //Inverse Mill's ratio dnorm(z)/pnorm(z)
 

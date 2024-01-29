@@ -1036,474 +1036,19 @@ void lmbayes_knownvar(double *bpost,
 }
 
 
-/************************************************************************
-                         INPUT/OUTPUT FUNCTIONS
-************************************************************************/
-
-/* open file for input */
-FILE *openIn(const char *filename)
-{
-    //assert(filename != NULL);
-    if ((ifile = fopen(filename, "r")) == NULL) {
-        fserror("openIn", "open file for read", filename);
-        /*NOTREACHED*/
-    }
-    return(ifile);
-}
-
-
-/* open file for output */
-FILE *openOut(const char *filename)
-{
-    //assert(filename != NULL);
-    if ((ofile = fopen(filename, "w")) == NULL) {
-        fserror("openOut", "open file for write", filename);
-        /*NOTREACHED*/
-    }
-    return ofile;
-}
-
-
-/* --------------------   read in   ------------------------- */
-
-//void scanFloat(char *txt, float *f)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %f ", f) != 1) {
-//    fserror("scanFloat", "read float", txt);
-//  }
-//}
-//
-//void scanDouble(char *txt, double *f)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %lf ", f) != 1) {
-//    fserror("scanDouble", "read double", txt);
-//  }
-//}
-//
-//void fscanDouble(FILE *ifile, char *txt, double *f)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %lf ", f) != 1) {
-//    fserror("fscanDouble", "read double", txt);
-//  }
-//}
-//
-//void scanInt(char *txt, int *n)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %d ", n) != 1) {
-//    fserror("scanInt", "read int", txt);
-//  }
-//}
-//
-//void fscanInt(FILE *ifile, char *txt, int *n)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %d ", n) != 1) {
-//    fserror("fscanInt", "read int", txt);
-//  }
-//}
-//
-//
-//void scanLong(char *txt, long *n)
-//{
-//  fscanf(ifile, txt);
-//  if (fscanf(ifile, " %ld ", n) != 1) {
-//    fserror("scanLong", "read long", txt);
-//  }
-//}
-//
-///* --------------------   read arrays   ------------------------- */
-//
-//void scanFloatArray(char *txt, float *x, int n)
-//{
-//  scanArray(txt, x, n);
-//}
-//
-//void scanArray(char *txt, float *x, int n)
-//{
-//  int	i;
-//
-//  fscanf(ifile, txt);
-//  for(i=0;i<n;i++) {
-//    if (fscanf(ifile, " %f ", &x[i]) != 1) {
-//      fserror("scanArray", "read float array", txt);
-//    }
-//  }
-//}
-//
-//void scanDoubleArray(char *txt, double *x, int n)
-//{
-//  int	i;
-//
-//  fscanf(ifile, txt);
-//  for(i=0;i<n;i++) {
-//    if (fscanf(ifile, " %lg ", &x[i]) != 1) {
-//      fserror("scanDoubleArray", "read double array", txt);
-//    }
-//  }
-//}
-//
-//void fscanDoubleArray(FILE *in, double *x, int n)
-//{
-//  int	i;
-//
-//  for(i=0;i<n;i++) {
-//    if (fscanf(in, " %lg ", &x[i]) != 1) {
-//      /* printf("i=%d\n", i); */
-//      fserror("fscanDoubleArray", "read double array", "");
-//    }
-//  }
-//}
-//
-//void scanString(char *txt, char *s, int n)
-//{
-//  fgets(s, n, ifile);
-//}
-//
-//
-//void fscanString(FILE *ifile, char *txt, char *s, int n)
-//{
-//  fgets(s, n, ifile);
-//}
-//
-//void scanDoubleMatrix(char *txt, double **x, int r, int c)
-//{
-//  int	i, j;
-//
-//  fscanf(ifile, txt);
-//  for(i=0;i<r;i++) {
-//    for(j=0;j<c;j++) {
-//      if (fscanf(ifile, " %lg ", &x[i][j]) != 1) {
-//        fserror("scanDoubleMatrix", "read double matrix", txt);
-//      }
-//    }
-//  }
-//}
-//
-//void fscanDoubleMatrix(FILE *ifile, double **x, int r, int c)
-//{
-//  int	i, j;
-//
-//  for(i=0;i<r;i++) {
-//    for(j=0;j<c;j++) {
-//      if (fscanf(ifile, " %lg ", &x[i][j]) != 1) {
-//        fserror("fscanDoubleMatrix", "read double matrix", "");
-//      }
-//    }
-//  }
-//}
-//
-//void scanIntArray(char *txt, int *x, int n)
-//{
-//  int	i;
-//
-//  fscanf(ifile, txt);
-//  for(i=0;i<n;i++){
-//    if (fscanf(ifile, " %d ", &x[i]) != 1) {
-//      fserror("scanIntArray", "read int array", txt);
-//    }
-//  }
-//}
-//
-//void fscanIntArray(FILE *ifile, int *x, int n)
-//{
-//  int	i;
-//
-//  for(i=0;i<n;i++){
-//    if (fscanf(ifile, " %d ", &x[i]) != 1) {
-//      fserror("fscanIntArray", "read int array", "");
-//    }
-//  }
-//}
-
-
-/* ------------------------  write scalars  ------------------------ */
-void writeInt(int i)
-{
-    if (fprintf(ofile, "%d\n", i) < 0) {
-        fserror("writeInt", "write int", "");
-        /*NOTREACHED*/
-    }
-}
-
-
-void writeLong(long i)
-{
-    if (fprintf(ofile, "%ld\n", i) < 0) {
-        fserror("writeLong", "write long", "");
-        /*NOTREACHED*/
-    }
-}
-
-
-void writeFloat(float x)
-{
-    if (fprintf(ofile, "%f\n", x) < 0) {
-        fserror("writeFloat", "write float", "");
-        /*NOTREACHED*/
-    }
-}
-
-
-void writeDouble(double x)
-{
-    if (fprintf(ofile, "%5.3e\n", x) < 0) {
-        fserror("writeDouble", "write double", "");
-        /*NOTREACHED*/
-    }
-}
-
-
-/* -----------------------  write arrays   --------------------- */
-
-void fwriteDoubleArray(FILE *f,
-                       double *x,
-                       int rows,
-                       int cols)
-{
-    int i, j, s1=0, s2=0;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            if (j%10 == 9) {
-                fprintf(f, "\n\t");
-            }
-            s1 = fprintf(f, "%5.3e ", x[i*cols+j]);
-            if (s1 < 0) {
-                break;
-            }
-        }
-        s2 = fprintf(f, "\n");
-        if ((s2 < 0) | (s1 < 0)) {
-            fserror("fwriteDoubleArray", "write double array", "");
-            /*NOTREACHED*/
-        }
-    }
-}
-
-
-void writeDoubleArray(double *x, int rows, int cols)
-{
-    fwriteDoubleArray(ofile, x, rows, cols);
-}
-
-
-void fwriteIntArray(FILE *f,
-                    int *x,
-                    int rows,
-                    int cols)
-{
-    int i, j, s1=0, s2=0;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            if (j%10 == 9) {
-                fprintf(f, "\n\t");
-            }
-            s1 = fprintf(f, "%d\t", x[i*cols+j]);
-            if (s1 < 0) {
-                break;
-            }
-        }
-        s2 = fprintf(f, "\n");
-        if ((s2 < 0) | (s1 < 0)) {
-            fserror("fwriteIntArray", "write int array", "");
-            /*NOTREACHED*/
-        }
-    }
-}
-
-
-void writeIntArray(int *x, int rows, int cols)
-{
-    fwriteIntArray(ofile, x, rows, cols);
-}
-
-
-void fwriteIntMatrix(FILE *f,
-                     int **x,
-                     int rows,
-                     int cols)
-{
-    int i, j, s=0;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            if (j%10 == 9) {
-                fprintf(f, "\n\t");
-            }
-            s = fprintf(f, "%d\t", x[i][j]);
-            if (s < 0) {
-                fserror("fwriteIntMatrix", "write int matrix", "");
-                /*NOTREACHED*/
-            }
-        }
-        fprintf(f, "\n");
-    }
-}
-
-
-void writeIntMatrix(int **x, int rows, int cols)
-{
-    fwriteIntMatrix(ofile, x, rows, cols);
-}
-
-
-void fwriteDoubleMatrix(FILE *f,
-                        double **x,
-                        int rows,
-                        int cols)
-{
-    int i, j, s;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        int c;
-
-        c = 0;
-        for (j = 0; j < cols; j++) {
-            if (++c > 10) {
-                fprintf(f, "\n\t");
-                c = 0;
-            }
-            s = fprintf(f, "%5.3e ", x[i][j]);
-            if (s < 0) {
-                fserror("fwriteDoubleMatrix", "write double matrix", "");
-                /*NOTREACHED*/
-            }
-        }
-        fprintf(f, "\n");
-    }
-}
-
-
-void writeDoubleMatrix(double **x, int rows, int cols)
-{
-    fwriteDoubleMatrix(ofile, x, rows, cols);
-}
-
-
-void fwriteDoubleMatrix2(FILE *f,
-                         double **x,
-                         int rows,
-                         int cols)
-{
-    int i, j, s=0;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        for (j = 0; j < cols; j++) {
-            if (j%10 == 9) {
-                fprintf(f, "\n\t");
-            }
-            s = fprintf(f, "%5.3e ", x[i][j]);
-            if (s < 0) {
-                fserror("fwriteDoubleMatrix2", "write double matrix", "");
-                /*NOTREACHED*/
-            }
-        }
-        fprintf(f, "\n");
-    }
-}
-
-
-void writeDoubleMatrix2(double **x, int rows, int cols)
-{
-    fwriteDoubleMatrix2(ofile, x, rows, cols);
-}
-
-
-void fwriteFloatArray(FILE *f,
-                      float *x,
-                      int rows,
-                      int cols)
-{
-    int i, j, s=0;
-
-    //assert(f != NULL);
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        int c;
-
-        c = 0;
-        for (j = 0; j < cols; j++) {
-            if (c++ > 9) {
-                fprintf(f, "\n\t");
-                c = 0;
-            }
-            s = fprintf(f, "%5.3e ", x[i*cols+j]);
-            if (s < 0) {
-                fserror("fwriteFloatArray", "write float matrix", "");
-                /*NOTREACHED*/
-            }
-        }
-        fprintf(f, "\n");
-    }
-}
-
-
-void writeFloatArray(float *x, int rows, int cols)
-{
-    fwriteFloatArray(ofile, x, rows, cols);
-}
-
-
-void writeArray(float *x,
-                int rows,
-                int cols)
-{
-    int i, j, s=0;
-
-    //assert(x != NULL);
-
-    for (i = 0; i < rows; i++) {
-        int c;
-
-        c = 0;
-        for (j = 0; j < cols; j++) {
-            if (c++ > 9) {
-                fprintf(ofile, "\n\t");
-                c = 0;
-            }
-            s = fprintf(ofile, "%5.3e ", x[i*cols+j]);
-            if (s < 0) {
-                fserror("writeArray", "write float matrix", "");
-                /*NOTREACHED*/
-            }
-        }
-        fprintf(ofile, "\n");
-    }
-}
-
 
 /******************************************************************************
-                                       ERROR HANDLING
+                            MESSAGES AND ERROR HANDLING
 ******************************************************************************/
 
-void fserror(const char *proc,
-             const char *act,
-             const char *what)
-{
-    _cstaterror(proc, act, what);
-    /*NOTREACHED*/
+void print_iterprogress(int *iter, int *niter, int *everyiter) {
+  if ((*iter % *everyiter) == 0) {
+    Rcout << "\r";  //Carriage return (deletes current line)
+    Rcout << 100 * (*iter) / (*niter) << "%"; //% iteration progress
+  }
 }
+
+
 
 
 void nrerror(const char *proc,
@@ -1525,18 +1070,7 @@ void errorC(const char *module,
 }
 
 
-void err_msg(const char *fct,
-             const char *txt,
-             int n1,
-             int n2,
-             int n3)
-{
-    REprintf("\n\n *** Error in %s \n", fct);
-    REprintf(txt, n1, n2, n3); /* n1,n2 allows to include numbers in txt */
-    REprintf("\n");
-    _cstatfatal();
-    /*NOTREACHED*/
-}
+
 
 
 /******************************************************************************
@@ -3691,6 +3225,90 @@ void inv_posdef_chol(double **invchol,
 }
 
 
+/* Inverse of a positive definite matrix A, inverse of its Cholesky decomposition and log(det(Ainv)) */
+void choldcinv_det(arma::mat *Ainv, arma::mat *cholAinv, double *logdet_Ainv, arma::mat *A) {
+  int i, npar= A->n_cols;
+  (*cholAinv) = arma::inv(trimatu(arma::chol(*A)));
+  (*Ainv)= (*cholAinv) * cholAinv->t();
+  for (i=0, (*logdet_Ainv=0); i<npar; i++) (*logdet_Ainv) += log(cholAinv->at(i,i));
+  (*logdet_Ainv) *= 2;
+
+}
+
+
+
+/* Update the inverse of symmetric matrix A after replacing row/col colid by difvals, given current inverse of A
+
+  The function uses fast rank 1 computations based on the Woodbury formula
+
+  Updated A adds difvals to A[colid,] then adds v2 to A[,colid], where v2= difvals with a zero in position colid
+
+  INPUT
+  - Ainv: inverse of A before the update
+  - difvals: new values of A[,colid] minus previous values of A[,colid] (and A[colid,], by symmetry)
+  - colid: row being updated
+
+  OUPUT: Ainv stores the inverse of A after the update
+
+*/
+void symmat_inv_colupdate(arma::mat *Ainv, arma::sp_mat *difvals, int colid) {
+  arma::sp_mat v2= (*difvals);
+  v2.at(colid,0)= 0;
+  updateinv_rank1(Ainv, difvals, colid); //inverse of A + difvals e^T
+  updateinv_rank1(Ainv, colid, &v2); //inverse of A + difvals e^T + e v2^T
+}
+
+
+
+/*Compute inverse of A + u v^T, given Ainv=A^{-1}
+
+ INPUT
+ - Ainv: A^{-1}
+ - u: column vector giving the rank 1 update
+ - v: column vector giving the rank 1 update
+
+ OUTPUT: Ainv stores the inverse of A + u v^T
+
+ Details: (A + u v^T)^{-1}= A^{-1} - A^{-1} u v^T A^{-1} / (1 + v^T A^{-1} u)
+*/
+void updateinv_rank1(arma::mat *Ainv, arma::sp_mat *u, arma::sp_mat *v) {
+  arma::mat Ainvu= (*Ainv) * (*u);
+  arma::mat vTAinvu= v->t() * Ainvu;
+  double den= 1.0 + vTAinvu.at(0,0);
+ 
+  arma::sp_mat vden= (*v) / den;
+  (*Ainv)= (*Ainv) - Ainvu * vden.t() * (*Ainv);
+}
+
+
+/* Particular case of updateinv_rank1 where only 1 row in A is updated by adding v^T
+
+ This is equivalent to setting u^T=(0,..,0,1,0,..,0) where 1 is in entry rowid
+*/
+void updateinv_rank1(arma::mat *Ainv, int rowid, arma::sp_mat *v) {
+  arma::mat Ainvu= Ainv->col(rowid);
+  arma::mat vTAinvu= v->t() * Ainvu;
+  double den= 1.0 + vTAinvu.at(0,0);
+
+  arma::sp_mat vden= (*v) / den;
+  (*Ainv)= (*Ainv) - Ainvu * vden.t() * (*Ainv);
+}
+
+/* Particular case of updateinv_rank1 where only column A[,colid] is updated by adding u
+
+ This is equivalent to setting v^T=(0,..,0,1,0,..,0) where 1 is in entry colid
+*/
+void updateinv_rank1(arma::mat *Ainv, arma::sp_mat *u, int colid) {
+  arma::mat vTAinv= Ainv->row(colid);
+  arma::mat vTAinvu= vTAinv * (*u);
+  double den= 1.0 + vTAinvu.at(0,0);
+
+  arma::sp_mat uden= (*u)/den;
+  (*Ainv)= (*Ainv) - (*Ainv) * uden * vTAinv; //good formula
+}
+
+
+
 /*
  * LU decomposition, Inverse and determinant of a non-singular matrix.
  * Given a matrix a[1..n][1..n], replace it by the LU decomposition of a
@@ -4320,6 +3938,108 @@ void sampled_wr(double *x,
     }
 }
 
+
+/*Random draw from a birth-death proposal. With probability pbirth take a random zero entry in model and set it to 1. With probability 1-pbirth take a random non-zero entry and set it to zero
+
+ Input
+
+ - model: input model, structured as a single-column sparse matrix
+
+ - pbirth: birth probability
+
+ Output
+
+ - index: index of the entry that was born / killed
+
+ - birth: indicates whether the entry given by index was born / killed, e.g. index= 0, birth=false means that entry 0 in model was killed
+
+
+*/
+void rbirthdeath(int *index, bool *birth, arma::SpMat<short> *model, double pbirth) {
+
+  bool found= false;
+  int i, dnonzero= model->n_nonzero, d= model->n_rows;
+  arma::SpMat<short>::iterator it;
+
+  (*birth)= (runif() < pbirth);
+
+  if (*birth) {  //propose birth
+
+    if (dnonzero < d) {  //if dnonzero==d, all entries are already non-zero
+
+      int idx_birth= runifdisc(1, d - dnonzero); //choose one of the d - dnonzero entries and set it to 1
+      int dnonzero_slice, previous_row= -1;
+
+      for (it= model->begin(); (it != model->end()) && (!found); ++it) {
+        dnonzero_slice= it.row() - previous_row - 1;
+
+        if (dnonzero_slice >= idx_birth) {
+          (*index)= previous_row + idx_birth;
+          found= true;
+        } else {
+          idx_birth -= dnonzero_slice;
+          previous_row= it.row();
+        }
+
+      }
+
+      if (!found) (*index)= previous_row + idx_birth;
+
+    }
+
+  } else {  //propose death
+
+    if (dnonzero>0) {  //if all entries are already zero, none can be killed
+
+      int idx_death= runifdisc(0, dnonzero - 1);
+
+      for (it= model->begin(), i=0; (it != model->end()) && (!found); ++it, i++) {
+        if (i == idx_death) {
+          (*index)= (int) it.row();
+          found= true;
+        }
+      }
+
+    }
+
+  }
+
+}
+
+
+//Probability mass function of a birth-death proposal
+double dbirthdeath(arma::SpMat<short> *modelnew, arma::SpMat<short> *model, double pbirth, bool logscale=true) {
+
+  int d= model->n_nonzero, dnew= modelnew->n_nonzero, nrows= model->n_rows;
+  double ans;
+
+  if (dnew > d) { //birth was proposed
+
+    ans= pbirth / (double) (model->n_rows - d);
+
+  } else if (dnew < d) { //death was proposed
+
+    ans= (1.0 - pbirth) / (double) d;
+
+  } else if ((dnew == d) && (d == nrows)) { //if birth was proposed, but all entries were non-zero
+
+    ans= pbirth; 
+
+  } else if ((dnew == d) && (d == 0)) { //if death was proposed, but all entries were zero
+
+    ans= 1.0 - pbirth;
+
+  } else {
+
+    ans= 0;
+
+  }
+
+  if (logscale) ans= log(ans);
+
+  return ans;
+
+}
 
 /************************************************************************
                        RANDOM VARIATE GENERATION
@@ -5653,6 +5373,19 @@ void rmvnormC(double *y,
     free_dvector(z, 1, n);
 }
 
+
+//draw from multivariate Normal for Armadillo input/output arguments. y and mu are taken as a column vector
+// - y: output
+// - mu: mean
+// - chols: Cholesky decomposition of the covariance, i.e. cov = chols.t() * chols
+void rmvnormC(arma::mat *y, arma::mat *mu, arma::mat *chols) {
+  int i, n= y->n_rows;
+  arma::mat z(n,1);
+
+  for (i = 0; i < n; i++) z.at(i,0) = rnormC(0, 1);
+  (*y)= chols->t() * z + (*mu);
+
+}
 
 //Mill's ratio (1-pnorm(z))/dnorm(z)
 double millsnorm(double z) {
